@@ -1,0 +1,384 @@
+#!/usr/bin/env python3
+"""room — irie 会議室システムのクライアント
+
+どのホストからでも irie のサーバ側 iried.py を呼んで会議に参加する薄いラッパ。
+設定は ~/.irie/config.json（room init で生成）。
+
+サブコマンド:
+  room init --as <who> [--ssh user@host] [--transport ssh|local] [--daemon PATH]
+  room start <topic...>            会議を開始しACTIVEに
+  room end                         会議を終了
+  room post --as <who> <text...>   発言（本文はstdin経由で渡るのでinjection安全）
+  room pull --as <who> [--wait] [--peek]
+                                   未読をseq昇順で取得しカーソル前進(--peekで前進しない)
+  room ack  --as <who> --seq <N>   カーソルを手動でNまで進める
+  room log  [--meeting <id>]       全文を表示
+  room status                      アクティブ会議の状態
+  room watch --as <who>            ライブ表示＋入力（会議窓 / 退出は /quit）
+  room serve [--host H] [--port N] [--open|--no-open]
+                                   人間用ブラウザUI(web/api-server.py)を起動しURLを表示。
+                                   既に起動済みならブラウザを開くだけ（退出は Ctrl+C）
+
+AIループ安全版: room pull --as <who> --wait --peek → 応答 → room ack --as <who> --seq <最後のseq>
+"""
+import sys
+import os
+import json
+import shlex
+import subprocess
+import time
+import select
+
+CONFIG = os.path.expanduser("~/.irie/config.json")
+LEGACY_CONFIG = os.path.expanduser("~/.kaigi/config.json")
+DEFAULT_SSH = "user@your-server"
+# iried.py は同じディレクトリ(room/bin)にある。導出して同一マシン既定で動かす。
+DEFAULT_DAEMON = os.path.join(os.path.dirname(os.path.abspath(__file__)), "iried.py")
+
+
+def daemon_path(cfg):
+    # 設定キーは "daemon"。旧 "kaigid" も後方互換で読む。無ければ同一マシン既定。
+    return cfg.get("daemon") or cfg.get("kaigid") or DEFAULT_DAEMON
+
+
+def load_cfg():
+    for path in (CONFIG, LEGACY_CONFIG):
+        if os.path.exists(path):
+            with open(path) as f:
+                return json.load(f)
+    # 設定ファイルが無ければ同一マシン既定(transport=local)で動く。
+    # リモート接続が必要なときだけ `room init --ssh user@host` を実行する。
+    return {"transport": "local", "daemon": DEFAULT_DAEMON, "python": "python3"}
+
+
+def call(cfg, cmd, payload):
+    data = json.dumps(payload, ensure_ascii=False).encode("utf-8", "surrogateescape")
+    py = cfg.get("python", "python3")
+    daemon = daemon_path(cfg)
+    if cfg.get("transport") == "local":
+        argv = [py, daemon, cmd]
+    else:
+        # リモートシェルへ渡す文字列は必ず shell-quote（設定値由来の injection を防ぐ）
+        remote = " ".join(shlex.quote(x) for x in (py, daemon, cmd))
+        argv = ["ssh", "-o", "ConnectTimeout=5", "-o", "BatchMode=yes",
+                cfg["ssh"], remote]
+    p = subprocess.run(argv, input=data, capture_output=True)
+    if p.returncode != 0:
+        raise RuntimeError(f"VPS接続失敗: {p.stderr.decode('utf-8', 'replace').strip() or 'unknown'}")
+    try:
+        return json.loads(p.stdout.decode("utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        raise RuntimeError(f"不正な応答: {p.stdout[:200]!r}")
+
+
+def fmt(m):
+    return f'[{m.get("seq","?"):>3}] {m.get("author","?")}: {m.get("text","")}'
+
+
+def need(resp):
+    if not resp.get("ok"):
+        sys.exit(f"エラー: {resp.get('error','不明')}")
+    return resp
+
+
+# ---- option parsing helpers ----
+
+def pop_opt(args, name):
+    """--name VALUE を取り出して返す（無ければNone）。argsは破壊的に縮む。"""
+    if name in args:
+        i = args.index(name)
+        val = args[i + 1] if i + 1 < len(args) else None
+        del args[i:i + 2]
+        return val
+    return None
+
+
+def pop_flag(args, name):
+    if name in args:
+        args.remove(name)
+        return True
+    return False
+
+
+def cmd_init(args):
+    who = pop_opt(args, "--as")
+    ssh = pop_opt(args, "--ssh") or DEFAULT_SSH
+    transport = pop_opt(args, "--transport") or "ssh"
+    daemon = pop_opt(args, "--daemon") or pop_opt(args, "--kaigid") or DEFAULT_DAEMON
+    python = pop_opt(args, "--python") or "python3"
+    if not who:
+        sys.exit("--as <名前> が必要です")
+    os.makedirs(os.path.dirname(CONFIG), exist_ok=True)
+    try:
+        os.chmod(os.path.dirname(CONFIG), 0o700)
+    except OSError:
+        pass
+    cfg = {"who": who, "transport": transport, "ssh": ssh,
+           "daemon": daemon, "python": python}
+    with open(CONFIG, "w") as f:
+        json.dump(cfg, f, ensure_ascii=False, indent=2)
+    print(f"設定を書きました: {CONFIG}")
+    print(json.dumps(cfg, ensure_ascii=False, indent=2))
+
+
+def who_of(cfg, args):
+    return pop_opt(args, "--as") or cfg.get("who")
+
+
+def cmd_start(cfg, args):
+    topic = " ".join(args).strip()
+    r = need(call(cfg, "start", {"topic": topic, "author": cfg.get("who", "system")}))
+    print(f"会議を開始: {r['meeting']}  議題: {r['topic']}")
+
+
+def cmd_end(cfg, args):
+    r = need(call(cfg, "end", {}))
+    print(f"会議を終了: {r['meeting']}")
+
+
+def cmd_post(cfg, args):
+    who = who_of(cfg, args)
+    text = " ".join(args).strip()
+    if text == "-" or not text:
+        text = sys.stdin.read().rstrip("\n")
+    if not text:
+        sys.exit("発言内容がありません")
+    r = need(call(cfg, "append", {"author": who, "text": text}))
+    print(f"[{r['seq']}] {who} として投稿しました")
+
+
+def cmd_pull(cfg, args):
+    who = who_of(cfg, args)
+    wait = pop_flag(args, "--wait")
+    peek = pop_flag(args, "--peek")
+    as_json = pop_flag(args, "--json")
+    # --fresh: 自分の発言を除いた新着(fresh)だけをトリガ・出力対象にする（デーモン用）
+    fresh_only = pop_flag(args, "--fresh")
+    deadline = time.monotonic() + 55
+    while True:
+        r = need(call(cfg, "read", {"who": who}))
+        msgs = r["messages"]
+        trigger = r.get("fresh", msgs) if fresh_only else msgs
+        if trigger:
+            out = trigger if fresh_only else msgs
+            if as_json:
+                print(json.dumps(out, ensure_ascii=False))
+            else:
+                for m in out:
+                    print(fmt(m))
+            if not peek and msgs:
+                call(cfg, "ack", {"who": who, "seq": msgs[-1]["seq"],
+                                  "meeting": r["meeting"]})
+            return
+        if not wait or time.monotonic() >= deadline:
+            return
+        time.sleep(2)
+
+
+def cmd_ack(cfg, args):
+    who = who_of(cfg, args)
+    seq = pop_opt(args, "--seq")
+    if seq is None:
+        sys.exit("--seq <N> が必要です")
+    r = need(call(cfg, "ack", {"who": who, "seq": int(seq)}))
+    print(f"カーソルを {r['cursor']} に更新しました")
+
+
+def cmd_ack_latest(cfg, args):
+    """現在の最新seqまでカーソルを進める（デーモンが応答後に既読化する用）。"""
+    who = who_of(cfg, args)
+    st = call(cfg, "status", {})
+    last = st.get("last_seq", 0) if st.get("ok") else 0
+    if last:
+        call(cfg, "ack", {"who": who, "seq": last})
+    print(f"既読を {last} に更新")
+
+
+def cmd_log(cfg, args):
+    meeting = pop_opt(args, "--meeting")
+    r = need(call(cfg, "log", {"meeting": meeting} if meeting else {}))
+    for m in r["messages"]:
+        print(fmt(m))
+
+
+def cmd_status(cfg, args):
+    as_json = pop_flag(args, "--json")
+    r = need(call(cfg, "status", {}))
+    if as_json:
+        print(json.dumps(r, ensure_ascii=False))
+        return
+    if not r.get("active"):
+        print("アクティブな会議はありません")
+    else:
+        print(f"会議中: {r['active']}  議題: {r.get('topic','')}  "
+              f"発言数: {r.get('count',0)}  最終seq: {r.get('last_seq',0)}")
+
+
+def cmd_watch(cfg, args):
+    who = who_of(cfg, args)
+    st = call(cfg, "status", {})
+    if st.get("ok") and not st.get("active"):
+        print("（アクティブな会議なし。room start <議題> で開始できます）")
+    print(f"== 会議室 watch as {who} ==  行を入力してEnterで発言 / 退出は /quit")
+    last_poll = 0.0
+    while True:
+        rdy, _, _ = select.select([sys.stdin], [], [], 1.0)
+        if rdy:
+            line = sys.stdin.readline()
+            if not line:
+                break
+            t = line.strip()
+            if t == "/quit":
+                print("退出しました")
+                break
+            if t:
+                try:
+                    call(cfg, "append", {"author": who, "text": t})
+                except RuntimeError as e:
+                    print(f"(送信失敗: {e})")
+        now = time.monotonic()
+        if now - last_poll >= 2:
+            last_poll = now
+            try:
+                r = call(cfg, "read", {"who": who})
+            except RuntimeError as e:
+                print(f"(取得失敗: {e})")
+                continue
+            if r.get("ok") and r["messages"]:
+                for m in r["messages"]:
+                    print(fmt(m))
+                call(cfg, "ack", {"who": who, "seq": r["messages"][-1]["seq"],
+                                  "meeting": r["meeting"]})
+
+
+def _web_server_path():
+    # room/bin/room → リポジトリ直下の web/api-server.py を導出（IRIE_WEB_SERVER で上書き可）
+    repo = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    return os.environ.get("IRIE_WEB_SERVER") or os.path.join(repo, "web", "api-server.py")
+
+
+def _probe_irie(host, port):
+    """host:port に何が居るか。"irie" / "other" / None（誰も listen していない）を返す。"""
+    import urllib.request
+    import urllib.error
+    try:
+        with urllib.request.urlopen(f"http://{host}:{port}/", timeout=0.7) as r:
+            return "irie" if r.headers.get("Server", "").startswith("irie") else "other"
+    except urllib.error.HTTPError as e:
+        hdrs = getattr(e, "headers", None)
+        return "irie" if hdrs and hdrs.get("Server", "").startswith("irie") else "other"
+    except urllib.error.URLError as e:
+        if isinstance(getattr(e, "reason", None), ConnectionRefusedError):
+            return None
+        return "other"
+    except Exception:
+        return "other"
+
+
+def _can_autoopen():
+    return (sys.platform == "darwin" or os.name == "nt"
+            or bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")))
+
+
+def _open_browser(url, force, no_open):
+    if not no_open and (force or _can_autoopen()):
+        try:
+            import webbrowser
+            if webbrowser.open(url):
+                return
+        except Exception:
+            pass
+    print(f"ブラウザで開いてください: {url}")
+
+
+def cmd_serve(cfg, args):
+    host = pop_opt(args, "--host") or os.environ.get("IRIE_HOST", "127.0.0.1")
+    port = pop_opt(args, "--port") or os.environ.get("IRIE_PORT", "8901")
+    force_open = pop_flag(args, "--open")
+    no_open = pop_flag(args, "--no-open")
+    try:
+        port_i = int(port)
+    except ValueError:
+        sys.exit("--port は数値で指定してください")
+    url_host = "127.0.0.1" if host in ("0.0.0.0", "::", "") else host
+    token = os.environ.get("IRIE_API_TOKEN", "")
+    url = f"http://{url_host}:{port_i}/"
+    open_url = url + (f"#token={token}" if token else "")
+
+    # 既に誰かが listen していれば、それが irie か確認して「開くだけ」。
+    existing = _probe_irie(url_host, port_i)
+    if existing == "irie":
+        print(f"irie Web は既に起動中: {url}")
+        _open_browser(open_url, force_open, no_open)
+        return
+    if existing == "other":
+        sys.exit(f"ポート {port_i} は irie 以外のプロセスが使用中です。"
+                 f"停止するか `room serve --port <別ポート>` を使ってください。")
+
+    server = _web_server_path()
+    if not os.path.exists(server):
+        sys.exit(f"Web サーバーが見つかりません: {server}（IRIE_WEB_SERVER で明示できます）")
+
+    py = cfg.get("python", "python3")
+    env = dict(os.environ)
+    env["IRIE_HOST"] = host
+    env["IRIE_PORT"] = str(port_i)
+    proc = subprocess.Popen([py, server], env=env)
+
+    # 子の終了シグナルを転送（Ctrl+C / kill で Web サーバーも一緒に止める）
+    import signal as _signal
+
+    def _forward(_sig, _frame):
+        try:
+            proc.terminate()
+        except Exception:
+            pass
+    _signal.signal(_signal.SIGTERM, _forward)
+    _signal.signal(_signal.SIGINT, _forward)
+
+    # listen するまで待ってブラウザを開く（bind 失敗時は api-server 側がメッセージを出して終了）
+    import socket
+    deadline = time.monotonic() + 5
+    up = False
+    while time.monotonic() < deadline:
+        if proc.poll() is not None:
+            break  # 早期終了（ポート使用中など）。メッセージは子プロセスが出している
+        try:
+            with socket.create_connection((url_host, port_i), timeout=0.3):
+                up = True
+                break
+        except OSError:
+            time.sleep(0.2)
+    if up:
+        print(f"irie Web UI: {url}")
+        _open_browser(open_url, force_open, no_open)
+    proc.wait()
+
+
+SUB = {
+    "start": cmd_start, "end": cmd_end, "post": cmd_post, "pull": cmd_pull,
+    "ack": cmd_ack, "ack-latest": cmd_ack_latest, "log": cmd_log,
+    "status": cmd_status, "watch": cmd_watch, "serve": cmd_serve,
+}
+
+
+def main():
+    argv = sys.argv[1:]
+    if not argv:
+        sys.exit(__doc__)
+    sub = argv[0]
+    rest = argv[1:]
+    if sub == "init":
+        cmd_init(rest)
+        return
+    if sub not in SUB:
+        sys.exit(f"未知のサブコマンド: {sub}\n{__doc__}")
+    cfg = load_cfg()
+    try:
+        SUB[sub](cfg, rest)
+    except RuntimeError as e:
+        sys.exit(f"エラー: {e}")
+
+
+if __name__ == "__main__":
+    main()

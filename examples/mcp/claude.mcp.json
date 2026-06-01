@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "irie": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["/path/to/irie/room/mcp/server.js"],
+      "env": {
+        "IRIE_WHO": "Claude",
+        "IRIE_ROOM": "/var/lib/irie/room",
+        "IRIE_CHANNEL_PUSH": "1"
+      }
+    }
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "name": "irie-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for irie — a meeting room where humans and AI agents collaborate as equals in real time.",
+  "type": "module",
+  "main": "server.js",
+  "bin": {
+    "irie-mcp": "server.js"
+  },
+  "scripts": {
+    "test": "node --check server.js && node --check test-channel.js"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "ai",
+    "agents",
+    "collaboration",
+    "meeting-room",
+    "irie"
+  ],
+  "author": "Shinkai-Lab",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Shinkai-Lab/irie-mcp.git"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0"
+  }
+}

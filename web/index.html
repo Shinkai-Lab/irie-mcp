@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="referrer" content="no-referrer">
+<title>irie — 会議室</title>
+<link rel="icon" type="image/png" href="/irie-icon.png">
+<style>
+  :root, [data-theme="default"] {
+    --bg-primary: #1a2a3a; --bg-secondary: #0f2030; --bg-input: #1a2a3a;
+    --border: #1a6090; --accent: #e87040; --accent-hover: #d06030;
+    --text: #e0e8f0; --text-muted: #8090a0; --text-success: #40c8a0;
+    --highlight: #2090c0; --avatar-human: #e87040; --avatar-ai: #2090c0;
+    --btn-text: #fff;
+  }
+  [data-theme="light"] {
+    --bg-primary: #f0e8f4; --bg-secondary: #e0d0e8; --bg-input: #f8f0fc;
+    --border: #c0a8d0; --accent: #a060c0; --accent-hover: #8848a8;
+    --text: #3a2848; --text-muted: #8870a0; --text-success: #0eab6c;
+    --highlight: #c078d8; --avatar-human: #e08090; --avatar-ai: #80b0d0;
+    --btn-text: #fff;
+  }
+  [data-theme="dark"] {
+    --bg-primary: #0a1628; --bg-secondary: #061020; --bg-input: #0a1628;
+    --border: #0f3060; --accent: #e04860; --accent-hover: #c03850;
+    --text: #d0d8e0; --text-muted: #607080; --text-success: #38b898;
+    --highlight: #1868a8; --avatar-human: #e04860; --avatar-ai: #1868a8;
+    --btn-text: #38b898;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, 'Segoe UI', sans-serif; background: var(--bg-primary); color: var(--text); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+  #header { padding: 8px 16px; background: var(--bg-secondary); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+  #header h1 { font-size: 16px; color: var(--accent); }
+  #header .info { font-size: 12px; color: var(--text-muted); }
+  #header .status { font-size: 12px; color: var(--text-success); }
+  #menu-toggle { display: none; padding: 4px 8px; background: var(--highlight); color: var(--text-success); border: none; border-radius: 4px; font-size: 12px; cursor: pointer; }
+
+  #main { flex: 1; display: flex; overflow: hidden; }
+
+  /* === Left Menu Panel === */
+  #menu-panel { width: 220px; min-width: 140px; background: var(--bg-secondary); display: flex; flex-direction: column; overflow-y: auto; flex-shrink: 0; }
+  .section-header { padding: 8px 12px; font-size: 12px; font-weight: bold; color: var(--text-success); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; cursor: pointer; user-select: none; }
+  .section-header:hover { background: var(--highlight); }
+
+  /* Ticket items */
+  .ticket-item { padding: 6px 10px; font-size: 11px; cursor: pointer; border-left: 3px solid transparent; }
+  .ticket-item:hover { background: var(--highlight); }
+  .ticket-item.active { border-left-color: var(--accent); background: var(--highlight); }
+  .ticket-item .t-id { color: var(--text-muted); }
+  .ticket-item .t-title { color: var(--text); }
+  .ticket-status { display: inline-block; padding: 0 4px; border-radius: 2px; font-size: 9px; margin-left: 4px; }
+  .s-open { background: #2070b0; color: #fff; }
+  .s-in_progress { background: #c08020; color: #fff; }
+  .s-done { background: #209060; color: #fff; }
+  .s-closed { background: #606060; color: #fff; }
+
+  /* File items */
+  .file-item { padding: 6px 10px; font-size: 11px; cursor: pointer; }
+  .file-item:hover { background: var(--highlight); }
+  .file-item a { color: #6ca0dc; text-decoration: none; }
+  .file-item .f-meta { font-size: 9px; color: var(--text-muted); }
+  .file-item .thumb { width: 100%; max-height: 80px; object-fit: cover; border-radius: 3px; margin-bottom: 2px; }
+
+  #new-ticket-form { padding: 6px 10px; display: none; }
+  #new-ticket-form input, #new-ticket-form select { width: 100%; padding: 4px 6px; margin-bottom: 3px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 3px; color: var(--text); font-size: 11px; }
+  .section-btn { width: calc(100% - 20px); margin: 4px 10px; padding: 4px; background: var(--highlight); color: var(--btn-text); border: 1px solid var(--border); border-radius: 3px; cursor: pointer; font-size: 11px; }
+  .section-btn:hover { border-color: var(--text-success); }
+  #upload-area { padding: 4px 10px; }
+  #upload-area label { display: block; padding: 4px; text-align: center; border: 1px dashed var(--border); border-radius: 4px; cursor: pointer; font-size: 11px; color: var(--text-muted); }
+  #upload-area label:hover { border-color: var(--text-success); color: var(--text-success); }
+  #upload-area input { display: none; }
+  #upload-status { font-size: 10px; color: var(--text-success); text-align: center; }
+
+  /* === Resize Handles === */
+  .resize-handle { width: 4px; background: var(--highlight); cursor: col-resize; flex-shrink: 0; }
+  .resize-handle:hover { background: var(--accent); }
+
+  /* === Center Detail Panel === */
+  #detail-panel { width: 0; min-width: 0; background: var(--bg-input); display: none; flex-direction: column; overflow: hidden; }
+  #detail-panel.open { display: flex; width: 350px; min-width: 200px; }
+  #detail-header { padding: 8px 12px; background: var(--bg-secondary); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; font-size: 13px; flex-shrink: 0; }
+  #detail-header .close-btn { background: none; border: none; color: var(--accent); cursor: pointer; font-size: 16px; padding: 0 4px; }
+  #detail-content { flex: 1; overflow-y: auto; padding: 12px; font-size: 13px; line-height: 1.6; }
+  #detail-content .field { margin-bottom: 12px; }
+  #detail-content .field-label { font-size: 11px; color: var(--text-muted); margin-bottom: 2px; }
+  #detail-content .field-value { color: var(--text); }
+  #detail-content select, #detail-content input, #detail-content textarea { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 4px; color: var(--text); padding: 4px 8px; font-size: 12px; width: 100%; font-family: inherit; }
+  #detail-content textarea { min-height: 80px; resize: vertical; }
+
+  /* === Right Chat Panel === */
+  #chat-panel { flex: 1; min-width: 280px; display: flex; flex-direction: column; }
+  #messages { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
+  .msg { display: flex; gap: 8px; align-items: flex-start; }
+  .msg .avatar { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; flex-shrink: 0; }
+  .msg .body { flex: 1; }
+  .msg .meta { font-size: 10px; color: var(--text-muted); margin-bottom: 1px; }
+  .msg .meta .name { font-weight: bold; margin-right: 6px; }
+  .msg .text { font-size: 13px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+  .msg.system .text { font-style: italic; font-size: 11px; opacity: 0.5; }
+  /* アバター/名前の色は config の display_color から動的に付与する（addMessage参照） */
+  .avatar { background: var(--avatar-ai); color: #fff; }
+  .msg.system .avatar { background: var(--bg-secondary); color: var(--text-muted); }
+  .msg.system .name { color: var(--text-muted); }
+
+  .mention-badge { padding: 2px 8px; border-radius: 12px; font-size: 11px; cursor: pointer; user-select: none; border: 1px solid var(--border); color: var(--text-muted); background: transparent; transition: all 0.15s; }
+  .mention-badge.active { border-color: currentColor; color: #fff; }
+  .mention-badge:hover { opacity: 0.8; }
+  #attach-preview { display: none; padding: 3px 12px; background: var(--bg-secondary); font-size: 11px; color: var(--text-success); flex-shrink: 0; }
+  #input-area { padding: 8px 12px; background: var(--bg-secondary); border-top: 1px solid var(--border); display: flex; gap: 6px; align-items: flex-end; flex-shrink: 0; }
+  #input-area label { padding: 8px; cursor: pointer; font-size: 16px; color: var(--text-muted); flex-shrink: 0; }
+  #input-area textarea { flex: 1; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-input); color: var(--text); font-size: 13px; outline: none; font-family: inherit; line-height: 1.3; max-height: 100px; overflow-y: auto; resize: none; }
+  #input-area textarea:focus { border-color: var(--accent); }
+  #input-area button { padding: 8px 14px; background: var(--accent); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; flex-shrink: 0; align-self: flex-end; }
+  #input-area button:hover { background: var(--accent-hover); }
+  #input-area button:disabled { background: #555; cursor: not-allowed; }
+
+  @media (max-width: 700px) {
+    #menu-panel { display: none; }
+    #menu-toggle { display: block; }
+    #menu-panel.open { display: flex; position: absolute; top: 38px; left: 0; bottom: 0; z-index: 10; width: 220px; }
+    #detail-panel.open { position: absolute; top: 38px; left: 0; right: 0; bottom: 0; z-index: 9; width: auto !important; }
+    .resize-handle { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <img id="header-icon" src="/irie-icon-3.png" style="width:28px;height:28px;border-radius:50%;object-fit:cover;background:#fff;padding:1px;">
+  <h1>irie</h1>
+  <button id="menu-toggle" onclick="document.getElementById('menu-panel').classList.toggle('open')">Menu</button>
+  <span class="info" id="meeting-id"></span>
+  <span class="status">●</span>
+  <button onclick="switchLang()" style="margin-left:auto;padding:2px 8px;background:#0f3460;color:#4ecca3;border:1px solid #0f3460;border-radius:3px;font-size:11px;cursor:pointer;" id="lang-btn">EN/JA</button>
+</div>
+
+<div id="main">
+  <!-- Left: Menu -->
+  <div id="menu-panel">
+    <div class="section-header" onclick="toggleSection('tickets')"><span data-i18n="tickets">Tickets</span><span id="ticket-count">0</span></div>
+    <div id="ticket-list"></div>
+    <div id="new-ticket-form">
+      <input type="text" id="ticket-title" placeholder="タイトル" data-i18n-placeholder="title_placeholder">
+      <select id="ticket-assignee"><option value="" data-i18n="unassigned">未アサイン</option></select>
+      <input type="text" id="ticket-desc" placeholder="詳細（任意）" data-i18n-placeholder="desc_placeholder">
+      <button class="section-btn" onclick="createTicket()" data-i18n="create">作成</button>
+    </div>
+    <button class="section-btn" onclick="showNewTicket()" data-i18n="new_ticket">+ チケット</button>
+
+    <div class="section-header" onclick="toggleSection('files')"><span data-i18n="files">Files</span><span id="file-count">0</span></div>
+    <div id="file-list"></div>
+    <div id="upload-area">
+      <label for="file-input" data-i18n="upload">+ アップロード</label>
+      <input type="file" id="file-input" onchange="attachFile(this)">
+      <div id="upload-status"></div>
+    </div>
+
+    <!-- Diagram は別配布のプラグイン。config に plugins.diagram=true がある時だけ表示する -->
+    <div id="diagram-plugin" style="display:none">
+      <div class="section-header" onclick="toggleSection('diagram')"><span>Diagram</span></div>
+      <div id="diagram-section">
+        <button class="section-btn" onclick="openDiagramPanel()">図表エディタ</button>
+      </div>
+    </div>
+
+    <div class="section-header" onclick="toggleSection('config')"><span data-i18n="config">Config</span></div>
+    <div id="config-section">
+      <button class="section-btn" onclick="openConfigPanel()" data-i18n="edit_config">設定を開く</button>
+    </div>
+  </div>
+
+  <div class="resize-handle" id="resize-left"></div>
+
+  <!-- Center: Detail -->
+  <div id="detail-panel">
+    <div id="detail-header">
+      <span id="detail-title" data-i18n="detail">詳細</span>
+      <button class="close-btn" onclick="closeDetail()">×</button>
+    </div>
+    <div id="detail-content"></div>
+  </div>
+
+  <div class="resize-handle" id="resize-right"></div>
+
+  <!-- Right: Chat -->
+  <div id="chat-panel">
+    <div id="messages"></div>
+    <div id="mention-bar" style="padding:4px 12px;display:flex;gap:4px;flex-shrink:0;"></div>
+    <div id="attach-preview"><span id="attach-name"></span><button onclick="clearAttach()" style="background:none;border:none;color:#e94560;cursor:pointer;margin-left:6px;">✕</button></div>
+    <div id="input-area">
+      <label for="chat-file-input" title="ファイル添付">+</label>
+      <input type="file" id="chat-file-input" style="display:none" onchange="attachFile(this)">
+      <textarea id="msg-input" placeholder="メッセージ（Ctrl+Vで画像貼付）" data-i18n-placeholder="msg_placeholder" rows="1"></textarea>
+      <button id="send-btn" onclick="sendMessage()" data-i18n="send">送信</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// IRIE_API_TOKEN を要求するサーバー向け。トークンは localStorage['irie-token'] に保存して送る。
+// 初回プロビジョニングは #token=...（フラグメントはサーバーに送られない）または ?token=... で渡せる。
+// 受け取ったら即座に URL から除去し、履歴・アドレスバー・Referer にトークンを残さない。
+(function() {
+  const fromQuery = new URLSearchParams(location.search).get('token');
+  const fromHash = new URLSearchParams((location.hash || '').replace(/^#/, '')).get('token');
+  const provided = fromHash || fromQuery;
+  if (provided) {
+    localStorage.setItem('irie-token', provided);
+    history.replaceState(null, '', location.pathname);  // ?token / #token を URL から消す
+  }
+})();
+const API_TOKEN = localStorage.getItem('irie-token') || '';
+function authH(base) { const h = Object.assign({}, base || {}); if (API_TOKEN) h['X-Irie-Token'] = API_TOKEN; return h; }
+// CSS/属性に差し込む色は hex のみ許可（display_color 経由の CSS/HTML インジェクション防止）
+function safeColor(c) { return /^#[0-9a-fA-F]{3,8}$/.test(c || '') ? c : ''; }
+// API はこの UI を配信しているのと同一オリジン（ポートは IRIE_PORT に追従）
+const API_BASE = `${location.origin}/api`;
+let lastSeq = 0;
+let i18n = {};
+let myName = '';
+let currentLang = localStorage.getItem('irie-lang') || navigator.language.startsWith('ja') ? 'ja' : 'en';
+
+async function loadI18n(lang) {
+  try {
+    const res = await fetch(`${location.origin}/i18n/${lang}.json`);
+    if (res.ok) { i18n = await res.json(); currentLang = lang; localStorage.setItem('irie-lang', lang); applyI18n(); }
+  } catch(e) { console.warn('i18n load failed:', lang); }
+}
+function t(key, vars) {
+  let s = i18n[key] || key;
+  if (vars) Object.entries(vars).forEach(([k,v]) => { s = s.replace(`{${k}}`, v); });
+  return s;
+}
+function applyI18n() {
+  document.title = t('app_title');
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => { el.placeholder = t(el.dataset.i18nPlaceholder); });
+  document.querySelectorAll('[data-i18n-title]').forEach(el => { el.title = t(el.dataset.i18nTitle); });
+}
+function switchLang() {
+  loadI18n(currentLang === 'ja' ? 'en' : 'ja');
+}
+const shownSeqs = new Set();
+let pendingFile = null;
+
+const msgInput = document.getElementById('msg-input');
+const messagesDiv = document.getElementById('messages');
+
+// --- Resize handles ---
+function initResize(handleId, leftEl, rightEl) {
+  const handle = document.getElementById(handleId);
+  if (!handle) return;
+  let startX, startLeftW, startRightW;
+  handle.addEventListener('mousedown', e => {
+    e.preventDefault();
+    startX = e.clientX;
+    const left = leftEl ? document.getElementById(leftEl) : null;
+    const right = rightEl ? document.getElementById(rightEl) : null;
+    if (left) startLeftW = left.offsetWidth;
+    if (right) startRightW = right.offsetWidth;
+    const onMove = e2 => {
+      const dx = e2.clientX - startX;
+      if (left) left.style.width = Math.max(100, startLeftW + dx) + 'px';
+    };
+    const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+}
+initResize('resize-left', 'menu-panel', null);
+initResize('resize-right', 'detail-panel', null);
+
+// --- Detail panel ---
+function openDetail(title, html) {
+  document.getElementById('detail-title').textContent = title;
+  document.getElementById('detail-content').innerHTML = html;
+  document.getElementById('detail-panel').classList.add('open');
+}
+function closeDetail() {
+  document.getElementById('detail-panel').classList.remove('open');
+}
+
+function openTicketDetail(t) {
+  const statuses = ['open','in_progress','done','closed'];
+  const assignees = ['', ...(_configCache.members || []).map(m => m.name)];
+  openDetail(`#${t.id} ${t.title}`, `
+    <div class="field"><div class="field-label">タイトル</div><div class="field-value">${escapeHtml(t.title)}</div></div>
+    <div class="field"><div class="field-label">ステータス</div>
+      <select onchange="updateTicketField(${t.id},'status',this.value)">
+        ${statuses.map(s=>`<option value="${s}" ${s===t.status?'selected':''}>${s}</option>`).join('')}
+      </select>
+    </div>
+    <div class="field"><div class="field-label">担当</div>
+      <select onchange="updateTicketField(${t.id},'assignee',this.value)">
+        ${assignees.map(a=>`<option value="${a}" ${a===t.assignee?'selected':''}>${a||'未アサイン'}</option>`).join('')}
+      </select>
+    </div>
+    <div class="field"><div class="field-label">詳細</div>
+      <textarea onblur="updateTicketField(${t.id},'description',this.value)">${escapeHtml(t.description||'')}</textarea>
+    </div>
+    <div class="field"><div class="field-label">作成</div><div class="field-value">${escapeHtml(t.created_by)} · ${new Date(t.created_at).toLocaleString('ja-JP')}</div></div>
+  `);
+  document.querySelectorAll('.ticket-item').forEach(el => el.classList.remove('active'));
+  const activeEl = document.querySelector(`.ticket-item[data-id="${t.id}"]`);
+  if (activeEl) activeEl.classList.add('active');
+}
+
+async function updateTicketField(id, field, value) {
+  const body = { id };
+  body[field] = value;
+  try {
+    const res = await fetch(`${API_BASE}/tickets/update`, {
+      method: 'POST', headers: authH({'Content-Type':'application/json'}), body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (data.ok) {
+      await fetch(`${API_BASE}/post`, {
+        method: 'POST', headers: authH({'Content-Type':'application/json'}),
+        body: JSON.stringify({ author: myName || undefined, text: `[チケット更新] #${id} ${field} → ${value}` })
+      });
+      await poll();
+    }
+    loadTickets();
+  } catch(e) {}
+}
+
+// --- Helpers ---
+function toggleSection(name) {
+  const el = document.getElementById(name === 'tickets' ? 'ticket-list' : 'file-list');
+  el.style.display = el.style.display === 'none' ? '' : 'none';
+}
+function showNewTicket() {
+  const f = document.getElementById('new-ticket-form');
+  f.style.display = f.style.display === 'none' ? 'block' : 'none';
+}
+function avatarInitial(n) { return n === 'system' ? 'S' : (Array.from(n || '')[0] || '?'); }
+function escapeHtml(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+function formatSize(b) { return b<1024?b+'B':b<1048576?(b/1024).toFixed(1)+'KB':(b/1048576).toFixed(1)+'MB'; }
+function scrollToBottom() { messagesDiv.scrollTop = messagesDiv.scrollHeight; }
+function memberColor(name) {
+  const m = (_configCache.members || []).find(x => x.name === name);
+  return safeColor(m && m.display_color);
+}
+
+function addMessage(msg) {
+  const div = document.createElement('div');
+  div.className = `msg ${msg.author==='system'?'system':''}`;
+  const color = msg.author === 'system' ? '' : memberColor(msg.author);
+  const avatarStyle = color ? ` style="background:${escapeHtml(color)}"` : '';
+  const nameStyle = color ? ` style="color:${escapeHtml(color)}"` : '';
+  div.innerHTML = `
+    <div class="avatar"${avatarStyle}>${escapeHtml(avatarInitial(msg.author))}</div>
+    <div class="body">
+      <div class="meta"><span class="name"${nameStyle}>${escapeHtml(msg.author)}</span><span>${new Date(msg.ts).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})}</span></div>
+      <div class="text">${escapeHtml(msg.text)}</div>
+    </div>`;
+  messagesDiv.appendChild(div);
+}
+
+// --- Polling ---
+async function poll() {
+  try {
+    const res = await fetch(`${API_BASE}/pull?since=${lastSeq}`, {headers: authH()});
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.meeting) document.getElementById('meeting-id').textContent = data.meeting;
+    if (data.messages?.length) {
+      let added = false;
+      data.messages.forEach(m => { if (!shownSeqs.has(m.seq)) { shownSeqs.add(m.seq); addMessage(m); added = true; } if (m.seq > lastSeq) lastSeq = m.seq; });
+      if (added) scrollToBottom();
+    }
+  } catch(e) {}
+}
+
+async function loadTickets() {
+  try {
+    const res = await fetch(`${API_BASE}/tickets`, {headers: authH()});
+    if (!res.ok) return;
+    const data = await res.json();
+    const tickets = data.tickets || [];
+    const active = tickets.filter(t=>t.status!=='closed'&&t.status!=='done');
+    const completed = tickets.filter(t=>t.status==='closed'||t.status==='done');
+    document.getElementById('ticket-count').textContent = active.length;
+    const list = document.getElementById('ticket-list');
+    list.innerHTML = '';
+    active.forEach(t => {
+      const div = document.createElement('div');
+      div.className = 'ticket-item'; div.dataset.id = t.id;
+      div.onclick = () => openTicketDetail(t);
+      div.innerHTML = `<span class="t-id">#${t.id}</span> <span class="t-title">${escapeHtml(t.title)}</span><span class="ticket-status s-${t.status}">${t.status}</span>`;
+      list.appendChild(div);
+    });
+    if (completed.length > 0) {
+      const toggle = document.createElement('div');
+      toggle.style.cssText = 'padding:4px 10px;font-size:10px;color:#888;cursor:pointer;user-select:none;';
+      toggle.textContent = `▶ 完了 (${completed.length})`;
+      toggle.onclick = () => {
+        const wrap = toggle.nextElementSibling;
+        if (wrap.style.display === 'none') { wrap.style.display = ''; toggle.textContent = `▼ 完了 (${completed.length})`; }
+        else { wrap.style.display = 'none'; toggle.textContent = `▶ 完了 (${completed.length})`; }
+      };
+      list.appendChild(toggle);
+      const wrap = document.createElement('div');
+      wrap.style.display = 'none';
+      completed.forEach(t => {
+        const div = document.createElement('div');
+        div.className = 'ticket-item'; div.dataset.id = t.id;
+        div.style.opacity = '0.5';
+        div.onclick = () => openTicketDetail(t);
+        div.innerHTML = `<span class="t-id">#${t.id}</span> <span class="t-title">${escapeHtml(t.title)}</span><span class="ticket-status s-${t.status}">${t.status}</span>`;
+        wrap.appendChild(div);
+      });
+      list.appendChild(wrap);
+    }
+  } catch(e) {}
+}
+
+async function loadFiles() {
+  try {
+    const res = await fetch(`${API_BASE}/files`, {headers: authH()});
+    if (!res.ok) return;
+    const data = await res.json();
+    const files = data.files || [];
+    document.getElementById('file-count').textContent = files.length;
+    const list = document.getElementById('file-list');
+    list.innerHTML = '';
+    files.sort((a,b) => b.ts.localeCompare(a.ts));
+    files.forEach(f => {
+      const url = `${location.origin}/uploads/${f.stored}`;
+      const div = document.createElement('div');
+      div.className = 'file-item';
+      div.innerHTML = `${f.is_image?`<img class="thumb" src="${url}">`:''}<a href="${url}" target="_blank">${escapeHtml(f.name)}</a><div class="f-meta">${f.author} · ${formatSize(f.size)}</div>`;
+      list.appendChild(div);
+    });
+  } catch(e) {}
+}
+
+// --- Tickets ---
+async function createTicket() {
+  const title = document.getElementById('ticket-title').value.trim();
+  if (!title) return;
+  const assignee = document.getElementById('ticket-assignee').value;
+  const desc = document.getElementById('ticket-desc')?.value || '';
+  try {
+    const res = await fetch(`${API_BASE}/tickets/create`, {
+      method:'POST', headers:authH({'Content-Type':'application/json'}),
+      body: JSON.stringify({ title, assignee: assignee||null, created_by: myName || undefined, description: desc })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      const t = data.ticket;
+      await fetch(`${API_BASE}/post`, { method:'POST', headers:authH({'Content-Type':'application/json'}),
+        body: JSON.stringify({ author: myName || undefined, text:`[チケット作成] #${t.id} ${t.title}${t.assignee?' → '+t.assignee:''}` }) });
+    }
+    document.getElementById('ticket-title').value = '';
+    if (document.getElementById('ticket-desc')) document.getElementById('ticket-desc').value = '';
+    document.getElementById('new-ticket-form').style.display = 'none';
+    loadTickets(); await poll();
+  } catch(e) {}
+}
+
+// --- File upload ---
+function attachFile(input) {
+  if (input.files[0]) { pendingFile = input.files[0]; document.getElementById('attach-name').textContent = pendingFile.name; document.getElementById('attach-preview').style.display = 'block'; }
+  input.value = '';
+}
+function clearAttach() { pendingFile = null; document.getElementById('attach-preview').style.display = 'none'; }
+
+document.addEventListener('paste', e => {
+  const items = e.clipboardData?.items;
+  if (!items) return;
+  for (const item of items) {
+    if (item.type.startsWith('image/')) {
+      e.preventDefault();
+      const blob = item.getAsFile();
+      pendingFile = new File([blob], `clipboard.${item.type.split('/')[1]||'png'}`, {type:item.type});
+      document.getElementById('attach-name').textContent = pendingFile.name;
+      document.getElementById('attach-preview').style.display = 'block';
+      msgInput.focus(); break;
+    }
+  }
+});
+
+msgInput.addEventListener('keydown', e => { if (e.key==='Enter'&&!e.shiftKey) { e.preventDefault(); sendMessage(); } });
+msgInput.addEventListener('input', () => { msgInput.style.height='auto'; msgInput.style.height=Math.min(msgInput.scrollHeight,100)+'px'; });
+
+async function sendMessage() {}
+const _send = async function() {
+  const text = msgInput.value.trim();
+  const btn = document.getElementById('send-btn');
+  btn.disabled = true;
+  if (pendingFile) {
+    const file = pendingFile; clearAttach();
+    const fd = new FormData(); fd.append('file', file); if (myName) fd.append('author', myName);
+    try {
+      const ures = await fetch(`${API_BASE}/upload`, {method:'POST', headers: authH(), body: fd});
+      const udata = await ures.json();
+      if (udata.ok) {
+        const f = udata.file;
+        const attachText = text ? `${text}\n[添付: ${f.name} (${location.origin}/uploads/${f.stored})]` : `[添付: ${f.name} (${location.origin}/uploads/${f.stored})]`;
+        const mentionPrefix = [...activeMentions].map(n => '@' + n).join(' ');
+        const chatText = mentionPrefix ? mentionPrefix + ' ' + attachText : attachText;
+        await fetch(`${API_BASE}/post`, {method:'POST', headers:authH({'Content-Type':'application/json'}), body: JSON.stringify({author: myName || undefined, text: chatText})});
+        loadFiles();
+      }
+    } catch(e) {}
+    msgInput.value = ''; msgInput.style.height = 'auto'; btn.disabled = false; msgInput.focus(); await poll(); return;
+  }
+  if (!text) { btn.disabled = false; return; }
+  const mentions = [...activeMentions].map(n => '@' + n).join(' ');
+  const fullText = mentions ? mentions + ' ' + text : text;
+  msgInput.value = '';
+  try {
+    await fetch(`${API_BASE}/post`, {method:'POST', headers:authH({'Content-Type':'application/json'}), body: JSON.stringify({author: myName || undefined, text: fullText})});
+    await poll();
+  } catch(e) { msgInput.value = text; }
+  msgInput.style.height = 'auto'; btn.disabled = false; msgInput.focus();
+};
+sendMessage = _send;
+
+let _configCache = {members: []};
+const activeMentions = new Set();
+
+async function loadConfig() {
+  try {
+    const r = await fetch(`${API_BASE}/config`, {headers: authH()});
+    _configCache = await r.json();
+    const human = (_configCache.members || []).find(m => m.role === 'human');
+    myName = (human && human.name) || '';
+    updateAssigneeOptions();
+    const dp = document.getElementById('diagram-plugin');
+    if (dp) dp.style.display = (_configCache.plugins && _configCache.plugins.diagram) ? '' : 'none';
+  } catch(e) {}
+  return _configCache;
+}
+
+function updateAssigneeOptions() {
+  const sel = document.getElementById('ticket-assignee');
+  if (!sel) return;
+  const cur = sel.value;
+  const opts = [`<option value="" data-i18n="unassigned">${t('unassigned') || '未アサイン'}</option>`];
+  (_configCache.members || []).forEach(m => {
+    opts.push(`<option value="${escapeHtml(m.name)}">${escapeHtml(m.name)}</option>`);
+  });
+  sel.innerHTML = opts.join('');
+  sel.value = cur;
+}
+
+function buildMentionBar() {
+  const bar = document.getElementById('mention-bar');
+  bar.innerHTML = '';
+  const members = (_configCache.members || []).filter(m => m.role !== 'system');
+  members.forEach(m => {
+    const btn = document.createElement('span');
+    btn.className = 'mention-badge';
+    btn.textContent = m.name;
+    btn.style.borderColor = safeColor(m.display_color) || '#0f3460';
+    btn.onclick = () => {
+      if (activeMentions.has(m.name)) {
+        activeMentions.delete(m.name);
+        btn.classList.remove('active');
+        btn.style.background = 'transparent';
+      } else {
+        activeMentions.add(m.name);
+        btn.classList.add('active');
+        btn.style.background = (safeColor(m.display_color) || '#0f3460') + '33';
+      }
+    };
+    bar.appendChild(btn);
+  });
+}
+
+function openConfigPanel() {
+  const cfg = _configCache;
+  const members = cfg.members || [];
+  const curTheme = localStorage.getItem('irie-theme') || 'default';
+  const themes = [
+    {id:'default', label:'Default (Ocean)', desc:'Blue/Cyan/Orange'},
+    {id:'light', label:'Light (Pastel)', desc:'Purple/Pink/Soft'},
+    {id:'dark', label:'Dark (Deep)', desc:'Navy/Red/Pro'},
+  ];
+  let html = '<div style="margin-bottom:16px;"><div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">Theme</div><div style="display:flex;gap:4px;">';
+  themes.forEach(t => {
+    const active = curTheme === t.id;
+    html += `<button onclick="setTheme('${t.id}')" style="flex:1;padding:6px 4px;border-radius:4px;border:1px solid ${active?'var(--accent)':'var(--border)'};background:${active?'var(--accent)':'transparent'};color:${active?'#fff':'var(--text)'};cursor:pointer;font-size:10px;">${t.label}</button>`;
+  });
+  html += '</div></div>';
+  html += '<div style="margin-bottom:12px;font-size:12px;color:var(--text-muted);">Members (config.json)</div>';
+  members.forEach((m, i) => {
+    html += `<div class="field" style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
+      <input value="${escapeHtml(m.name)}" style="flex:2;padding:4px 6px;background:var(--bg-input);border:1px solid var(--border);color:var(--text);border-radius:4px;" onchange="updateConfigMember(${i},'name',this.value)">
+      <select style="flex:1;padding:4px;background:var(--bg-input);border:1px solid var(--border);color:var(--text);border-radius:4px;" onchange="updateConfigMember(${i},'role',this.value)">
+        <option value="human" ${m.role==='human'?'selected':''}>human</option>
+        <option value="ai" ${m.role==='ai'?'selected':''}>ai</option>
+      </select>
+      <input type="color" value="${escapeHtml(safeColor(m.display_color) || '#0f3460')}" style="width:30px;height:24px;border:none;cursor:pointer;" onchange="updateConfigMember(${i},'display_color',this.value)">
+      <button onclick="removeConfigMember(${i})" style="background:none;border:none;color:#e94560;cursor:pointer;font-size:14px;">×</button>
+    </div>`;
+  });
+  html += `<button onclick="addConfigMember()" style="margin-top:8px;padding:4px 12px;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11px;">+ Add Member</button>`;
+  openDetail('Config', html);
+}
+
+const THEME_ICONS = {default: '/irie-icon-3.png', light: '/irie-icon-4.png', dark: '/irie-icon-2.png'};
+function openDiagramPanel() {
+  openDetail('Diagram', '<iframe src="http://' + location.hostname + ':8902/" sandbox="allow-scripts allow-same-origin" style="width:100%;height:100%;border:none;border-radius:4px;background:#fff;"></iframe>');
+  const dc = document.getElementById('detail-content');
+  if (dc) dc.style.padding = '0';
+  const dp = document.getElementById('detail-panel');
+  if (dp) { dp.style.width = '600px'; dp.style.minWidth = '400px'; }
+}
+
+function setTheme(id) {
+  document.documentElement.setAttribute('data-theme', id);
+  localStorage.setItem('irie-theme', id);
+  const icon = THEME_ICONS[id] || THEME_ICONS.default;
+  const hdr = document.getElementById('header-icon');
+  if (hdr) hdr.src = icon;
+  const fav = document.querySelector('link[rel="icon"]');
+  if (fav) fav.href = icon;
+  openConfigPanel();
+}
+(function() { const t = localStorage.getItem('irie-theme') || 'default'; document.documentElement.setAttribute('data-theme', t); const icon = THEME_ICONS[t]; const hdr = document.getElementById('header-icon'); if (hdr) hdr.src = icon; const fav = document.querySelector('link[rel="icon"]'); if (fav) fav.href = icon; })();
+
+async function saveConfig() {
+  await fetch(`${API_BASE}/config`, {method:'POST', headers:authH({'Content-Type':'application/json'}), body: JSON.stringify(_configCache)});
+  buildMentionBar();
+}
+
+function updateConfigMember(i, field, value) {
+  _configCache.members[i][field] = value;
+  saveConfig();
+}
+
+function removeConfigMember(i) {
+  _configCache.members.splice(i, 1);
+  saveConfig();
+  openConfigPanel();
+}
+
+function addConfigMember() {
+  _configCache.members.push({name: 'new', role: 'ai', display_color: '#888888'});
+  saveConfig();
+  openConfigPanel();
+}
+
+loadI18n(currentLang).then(async () => { await loadConfig(); poll(); loadTickets(); loadFiles(); buildMentionBar(); });
+setInterval(poll, 2000);
+setInterval(loadTickets, 5000);
+setInterval(loadFiles, 10000);
+</script>
+</body>
+</html>

@@ -1,0 +1,47 @@
+# ── Local MCP / client configuration (never publish) ──
+.mcp.json
+.claude/
+.kaigi/
+.irie/
+
+# ── Runtime room data (lives under IRIE_ROOM, never publish) ──
+room/ACTIVE
+room/*.jsonl
+room/config.json
+room/tickets.jsonl
+room/.lock
+room/.tickets.lock
+room/*.lock
+room/cursor/
+room/meta/
+room/uploads/
+room/files/
+room/codex-notify.log
+
+# Private bootstrap / internal docs
+room/*-minato.md
+REVIEW.md
+
+# ── Components not part of this release ──
+# Diagram plugin is distributed separately; specs/ holds its design doc
+plugins/
+specs/
+
+# ── Generated / local-only ──
+.codex-app-schema/
+node_modules/
+room/mcp/node_modules/
+__pycache__/
+*.py[cod]
+*.log
+.pytest_cache/
+.coverage
+coverage/
+dist/
+build/
+
+# ── Editor / OS noise ──
+.DS_Store
+Thumbs.db
+*.swp
+*~

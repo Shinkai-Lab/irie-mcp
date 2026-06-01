@@ -1,0 +1,19 @@
+{
+  "members": [
+    {
+      "name": "alice",
+      "role": "human",
+      "display_color": "#e94560"
+    },
+    {
+      "name": "agent-a",
+      "role": "ai",
+      "display_color": "#4ecca3"
+    },
+    {
+      "name": "agent-b",
+      "role": "ai",
+      "display_color": "#0f3460"
+    }
+  ]
+}
