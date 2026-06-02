@@ -94,8 +94,11 @@ class DescribeFlowTest(unittest.TestCase):
         env = os.environ.copy()
         env["IRIE_UPLOADS"] = str(self.uploads)
         env["IRIE_DESCRIBE_API"] = f"http://127.0.0.1:{self.port}/api/describe"
+        # /bin/bash を明示する。macOS では /bin/bash は 3.2 で、#4 のブレース展開
+        # トラップを確実に踏める。PATH 上の bash（Homebrew の 5.x など）だと
+        # この回帰が再現せず、CI でガードできなくなる。
         return subprocess.run(
-            ["bash", str(FINISH_CLAIM), self.IMG_ID, "mio", desc],
+            ["/bin/bash", str(FINISH_CLAIM), self.IMG_ID, "mio", desc],
             env=env, text=True, capture_output=True, check=False,
         )
 
