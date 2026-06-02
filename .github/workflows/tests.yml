@@ -1,0 +1,35 @@
+name: tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  test:
+    # Linux と macOS の両方で回す。macOS は flock 不在・bash 3.2・CWD 依存など
+    # Linux では踏まないクロスプラットフォームの差異を検出するために必須。
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install MCP SDK
+        run: npm install --prefix room/mcp
+
+      - name: Syntax-check MCP server (JS)
+        run: node --check room/mcp/server.js
+
+      - name: Run test suite
+        run: python -m unittest discover -s tests -t . -v
