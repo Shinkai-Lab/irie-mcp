@@ -45,7 +45,13 @@ Available tools:
 - irie_pull: Manually fetch unread messages
 - irie_ticket_create: Create a ticket
 - irie_ticket_list: List tickets
-- irie_ticket_update: Update a ticket (status/assignee/comment)`
+- irie_ticket_update: Update a ticket (status/assignee/comment)
+
+Image rules:
+- When you see [添付: ...] in a message, DO NOT read the image URL directly
+- Use irie_image_read(id) to check if a description exists
+- If no description: use irie_image_claim(id) to claim it, then irie_image_describe(id, description) to save your description
+- If description exists: read the text (zero token cost)`
   : `You are connected to irie-mcp, a meeting room where humans and AI agents collaborate in real time.
 
 Channel push is disabled for this client. Use irie_pull when the user asks you to check the room, then reply with irie_post if needed.
@@ -56,7 +62,13 @@ Available tools:
 - irie_pull: Fetch unread messages and advance your cursor
 - irie_ticket_create: Create a ticket
 - irie_ticket_list: List tickets
-- irie_ticket_update: Update a ticket (status/assignee/comment)`;
+- irie_ticket_update: Update a ticket (status/assignee/comment)
+
+Image rules:
+- When you see [添付: ...] in a message, DO NOT read the image URL directly
+- Use irie_image_read(id) to check if a description exists
+- If no description: use irie_image_claim(id) to claim it, then irie_image_describe(id, description) to save your description
+- If description exists: read the text (zero token cost)`;
 
 // stdout傍受デバッグ: MCPのstdout payloadは会話内容を含むため、既定では記録しない。
 // IRIE_DEBUG / IRIE_MCP_LOG を設定したときだけ stdout を傍受してログに残す。
@@ -183,6 +195,37 @@ const mcp = new Server(
   }
 );
 
+// 画像claim関連ヘルパー
+function callClaim(fileId) {
+  const { transport, python: py, room } = resolveConfig();
+  const claimScript = join(dirname(fileURLToPath(import.meta.url)), "..", "bin", "irie-claim.sh");
+  const childEnv = room ? { ...process.env, IRIE_ROOM: room } : process.env;
+  if (transport !== "local") throw new Error("画像claimはローカル専用");
+  const result = spawnSync("bash", [claimScript, fileId, WHO], {
+    encoding: "utf8", timeout: 10000, env: childEnv,
+  });
+  return { exitCode: result.status, output: (result.stdout || "").trim() };
+}
+
+function callFinishClaim(fileId, description) {
+  const { transport, room } = resolveConfig();
+  const finishScript = join(dirname(fileURLToPath(import.meta.url)), "..", "bin", "irie-finish-claim.sh");
+  const childEnv = room ? { ...process.env, IRIE_ROOM: room } : process.env;
+  if (transport !== "local") throw new Error("画像claimはローカル専用");
+  const result = spawnSync("bash", [finishScript, fileId, WHO, description], {
+    encoding: "utf8", timeout: 30000, env: childEnv,
+  });
+  return { exitCode: result.status, output: (result.stdout || "").trim() };
+}
+
+function loadUploadMeta() {
+  const { room } = resolveConfig();
+  const metaPath = join(room || "room", "uploads", "meta.jsonl");
+  try {
+    return readFileSync(metaPath, "utf8").split("\n").filter(Boolean).map(l => JSON.parse(l));
+  } catch { return []; }
+}
+
 const TOOLS = [
   {
     name: "irie_post",
@@ -252,6 +295,48 @@ const TOOLS = [
         comment: { type: "string", description: "追加するコメント" },
       },
       required: ["id"],
+    },
+  },
+  {
+    name: "irie_image_list",
+    description: "共有された画像の一覧を取得する。descriptionがある画像はテキストで内容を確認できる",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    name: "irie_image_read",
+    description: "画像の内容を取得する。descriptionがあればテキストを返す(トークン節約)。なければclaimが必要",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "画像のファイルID" },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "irie_image_claim",
+    description: "画像のdescription書き込み権を取得する。成功したら画像を読んでdescriptionを書いてください",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "画像のファイルID" },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "irie_image_describe",
+    description: "claim済み画像のdescriptionを保存する。他のAIはこのテキストを読むだけで画像を確認できる",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "画像のファイルID" },
+        description: { type: "string", description: "画像の説明テキスト" },
+      },
+      required: ["id", "description"],
     },
   },
 ];
@@ -369,6 +454,79 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
         return { content: [{ type: "text", text: `#${r.ticket.id} 更新: ${r.changed.join(", ")}` }] };
       } catch (e) {
         return { content: [{ type: "text", text: `更新失敗: ${e.message}` }], isError: true };
+      }
+    }
+
+    case "irie_image_list": {
+      try {
+        const meta = loadUploadMeta();
+        const images = meta.filter(e => e.is_image);
+        if (images.length === 0) {
+          return { content: [{ type: "text", text: "共有画像はありません" }] };
+        }
+        const lines = images.map(e => {
+          const status = e.description ? `✅ described by ${e.claimed_by}` : "⏳ description未作成";
+          return `[${e.id}] ${e.name} — ${status}`;
+        });
+        return { content: [{ type: "text", text: lines.join("\n") }] };
+      } catch (e) {
+        return { content: [{ type: "text", text: `取得失敗: ${e.message}` }], isError: true };
+      }
+    }
+
+    case "irie_image_read": {
+      try {
+        const meta = loadUploadMeta();
+        const img = meta.find(e => e.id === args.id && e.is_image);
+        if (!img) {
+          return { content: [{ type: "text", text: `画像 ${args.id} が見つかりません` }], isError: true };
+        }
+        if (img.description) {
+          return { content: [{ type: "text", text: `[${img.id}] ${img.name}\n説明: ${img.description}\n(described by ${img.claimed_by})` }] };
+        }
+        return { content: [{ type: "text", text: `[${img.id}] ${img.name}\ndescriptionがありません。irie_image_claim で取得権を取ってから画像を読んで irie_image_describe で説明を書いてください。` }] };
+      } catch (e) {
+        return { content: [{ type: "text", text: `取得失敗: ${e.message}` }], isError: true };
+      }
+    }
+
+    case "irie_image_claim": {
+      try {
+        const meta = loadUploadMeta();
+        const img = meta.find(e => e.id === args.id && e.is_image);
+        if (!img) {
+          return { content: [{ type: "text", text: `画像 ${args.id} が見つかりません` }], isError: true };
+        }
+        if (img.description) {
+          return { content: [{ type: "text", text: `既にdescription済みです:\n${img.description}\n(described by ${img.claimed_by})` }] };
+        }
+        const result = callClaim(args.id);
+        if (result.output === "CLAIMED") {
+          const { room } = resolveConfig();
+          const imgPath = join(room || "room", "uploads", img.stored);
+          return { content: [
+            { type: "text", text: `claim成功。画像を読んで irie_image_describe で説明を書いてください。` },
+            { type: "image", data: readFileSync(imgPath).toString("base64"), mimeType: img.mime },
+          ]};
+        } else if (result.output.startsWith("TAKEN_BY")) {
+          return { content: [{ type: "text", text: `${result.output} — 他のAIがclaim中です。完了を待ってください。` }] };
+        } else {
+          return { content: [{ type: "text", text: `claim失敗: ${result.output}` }], isError: true };
+        }
+      } catch (e) {
+        return { content: [{ type: "text", text: `claim失敗: ${e.message}` }], isError: true };
+      }
+    }
+
+    case "irie_image_describe": {
+      try {
+        const result = callFinishClaim(args.id, args.description);
+        if (result.exitCode === 0) {
+          return { content: [{ type: "text", text: `画像 ${args.id} のdescriptionを保存しました。他のAIはテキストで確認できます。` }] };
+        }
+        return { content: [{ type: "text", text: `保存失敗: ${result.output}` }], isError: true };
+      } catch (e) {
+        return { content: [{ type: "text", text: `保存失敗: ${e.message}` }], isError: true };
       }
     }
 

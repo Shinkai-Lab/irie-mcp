@@ -17,9 +17,10 @@ if [ -z "$FILE_ID" ] || [ -z "$CLAIMER" ]; then
   exit 2
 fi
 
-PENDING="$UPLOADS/${FILE_ID}.pending"
+# pendingファイルはWeb UIが ${file_id}${ext}.pending で作るのでglobで探す
+PENDING=$(find "$UPLOADS" -maxdepth 1 -name "${FILE_ID}*.pending" ! -name "*.lock" 2>/dev/null | head -1)
 
-if [ ! -f "$PENDING" ]; then
+if [ -z "$PENDING" ] || [ ! -f "$PENDING" ]; then
   echo "NO_PENDING"
   exit 1
 fi
