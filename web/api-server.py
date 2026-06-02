@@ -27,6 +27,7 @@ import os
 import uuid
 import mimetypes
 import datetime
+import socketserver
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import urlparse
@@ -489,6 +490,23 @@ class IrieHandler(BaseHTTPRequestHandler):
         self._json_response({"ok": True, "file": entry})
 
 
+class IrieHTTPServer(HTTPServer):
+    """HTTPServer that skips the reverse-DNS lookup done in server_bind().
+
+    http.server.HTTPServer.server_bind() calls socket.getfqdn(host), which can
+    block for ~30s on hosts with slow or misconfigured reverse DNS (observed on
+    CI runners). Worse, it runs between bind() and listen(), so the socket does
+    not accept connections until it returns — making startup appear to hang.
+    Set server_name from the address directly instead.
+    """
+
+    def server_bind(self):
+        socketserver.TCPServer.server_bind(self)
+        host, port = self.server_address[:2]
+        self.server_name = host
+        self.server_port = port
+
+
 if __name__ == "__main__":
     if not is_loopback(HOST) and not API_TOKEN:
         sys.exit(
@@ -496,7 +514,7 @@ if __name__ == "__main__":
             f"      ローカル専用で起動するなら IRIE_HOST=127.0.0.1 のままにしてください。"
         )
     try:
-        server = HTTPServer((HOST, PORT), IrieHandler)
+        server = IrieHTTPServer((HOST, PORT), IrieHandler)
     except OSError as e:
         if e.errno == errno.EADDRINUSE:
             sys.exit(
