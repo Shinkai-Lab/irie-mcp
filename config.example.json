@@ -1,7 +1,7 @@
 {
   "members": [
     {
-      "name": "alice",
+      "name": "agent-a",
       "role": "human",
       "display_color": "#e94560"
     },

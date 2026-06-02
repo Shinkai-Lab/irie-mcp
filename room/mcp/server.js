@@ -487,6 +487,22 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
         if (img.description) {
           return { content: [{ type: "text", text: `[${img.id}] ${img.name}\n説明: ${img.description}\n(described by ${img.claimed_by})` }] };
         }
+        // pendingファイルがあれば誰かがclaim中 → 待機
+        const { room } = resolveConfig();
+        const uploadsDir = join(room || "room", "uploads");
+        const hasPending = existsSync(join(uploadsDir, `${img.stored}.pending`));
+        if (hasPending) {
+          log(`image_read: ${args.id} pending, waiting for description...`);
+          for (let i = 0; i < 30; i++) {
+            await new Promise(r => setTimeout(r, 2000));
+            const fresh = loadUploadMeta();
+            const updated = fresh.find(e => e.id === args.id);
+            if (updated?.description) {
+              return { content: [{ type: "text", text: `[${updated.id}] ${updated.name}\n説明: ${updated.description}\n(described by ${updated.claimed_by})` }] };
+            }
+          }
+          return { content: [{ type: "text", text: `画像 ${args.id} はまだ処理中です。後で再度 irie_image_read で確認してください。` }] };
+        }
         return { content: [{ type: "text", text: `[${img.id}] ${img.name}\ndescriptionがありません。irie_image_claim で取得権を取ってから画像を読んで irie_image_describe で説明を書いてください。` }] };
       } catch (e) {
         return { content: [{ type: "text", text: `取得失敗: ${e.message}` }], isError: true };
@@ -501,7 +517,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
           return { content: [{ type: "text", text: `画像 ${args.id} が見つかりません` }], isError: true };
         }
         if (img.description) {
-          return { content: [{ type: "text", text: `既にdescription済みです:\n${img.description}\n(described by ${img.claimed_by})` }] };
+          return { content: [{ type: "text", text: `[${img.id}] ${img.name}\n説明: ${img.description}\n(described by ${img.claimed_by})` }] };
         }
         const result = callClaim(args.id);
         if (result.output === "CLAIMED") {
@@ -511,8 +527,17 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
             { type: "text", text: `claim成功。画像を読んで irie_image_describe で説明を書いてください。` },
             { type: "image", data: readFileSync(imgPath).toString("base64"), mimeType: img.mime },
           ]};
-        } else if (result.output.startsWith("TAKEN_BY")) {
-          return { content: [{ type: "text", text: `${result.output} — 他のAIがclaim中です。完了を待ってください。` }] };
+        } else if (result.output.startsWith("TAKEN_BY") || result.output === "LOCK_BUSY") {
+          log(`image_claim: ${args.id} locked, waiting for description...`);
+          for (let i = 0; i < 30; i++) {
+            await new Promise(r => setTimeout(r, 2000));
+            const fresh = loadUploadMeta();
+            const updated = fresh.find(e => e.id === args.id);
+            if (updated?.description) {
+              return { content: [{ type: "text", text: `[${updated.id}] ${updated.name}\n説明: ${updated.description}\n(described by ${updated.claimed_by})` }] };
+            }
+          }
+          return { content: [{ type: "text", text: `タイムアウト: 画像 ${args.id} はまだ処理中です。後で irie_image_read で確認してください。` }] };
         } else {
           return { content: [{ type: "text", text: `claim失敗: ${result.output}` }], isError: true };
         }
