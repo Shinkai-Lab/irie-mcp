@@ -31,5 +31,22 @@ jobs:
       - name: Syntax-check MCP server (JS)
         run: node --check room/mcp/server.js
 
+      - name: Diagnostics (bash version + server boot)
+        run: |
+          echo "bash (PATH): $(bash --version | head -1)"
+          echo "bash (/bin): $(/bin/bash --version | head -1)"
+          which -a bash || true
+          echo "python: $(python --version)"
+          room="${RUNNER_TEMP:-/tmp}/diag-room"
+          mkdir -p "$room"
+          echo '{"members":[{"name":"alice","role":"human","display_color":"#fff"}]}' > "$room/config.json"
+          IRIE_ROOM="$room" IRIE_HOST=127.0.0.1 IRIE_PORT=8910 python web/api-server.py &
+          pid=$!
+          for i in $(seq 1 20); do
+            curl -sf -o /dev/null "http://127.0.0.1:8910/" && break || sleep 0.5
+          done
+          curl -sS -m5 -o /dev/null -w "GET / -> %{http_code}\n" "http://127.0.0.1:8910/" || echo "SERVER UNREACHABLE"
+          kill "$pid" 2>/dev/null || true
+
       - name: Run test suite
         run: python -m unittest discover -s tests -t . -v
