@@ -25,9 +25,15 @@ if [ -z "$PENDING" ] || [ ! -f "$PENDING" ]; then
   exit 1
 fi
 
-# flock排他: pendingファイル自体をロック対象にする
-exec 9>"$PENDING.lock"
-flock -n 9 || { echo "LOCK_BUSY"; exit 1; }
+# 排他ロック: flock があればそれを使い、無ければ（macOS など util-linux 非搭載環境）
+# mkdir の原子性でロックを代替する。flock 不在を握りつぶさず確実に排他する。
+if command -v flock >/dev/null 2>&1; then
+  exec 9>"$PENDING.lock"
+  flock -n 9 || { echo "LOCK_BUSY"; exit 1; }
+else
+  mkdir "$PENDING.lockd" 2>/dev/null || { echo "LOCK_BUSY"; exit 1; }
+  trap 'rmdir "$PENDING.lockd" 2>/dev/null' EXIT
+fi
 
 # ロック取得成功。pendingの中身を確認
 CURRENT=$(cat "$PENDING" 2>/dev/null | tr -d '[:space:]')
