@@ -301,6 +301,10 @@ function openTicketDetail(t) {
       <textarea onblur="updateTicketField(${t.id},'description',this.value)">${escapeHtml(t.description||'')}</textarea>
     </div>
     <div class="field"><div class="field-label">作成</div><div class="field-value">${escapeHtml(t.created_by)} · ${new Date(t.created_at).toLocaleString('ja-JP')}</div></div>
+    ${(t.comments && t.comments.length) ? `<div class="field"><div class="field-label">コメント (${t.comments.length})</div>
+      ${t.comments.map(c=>`<div class="field-value" style="white-space:pre-wrap;border-left:2px solid var(--border);padding-left:8px;margin-bottom:8px">
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px">${escapeHtml(c.author||'')}${c.ts?' · '+new Date(c.ts).toLocaleString('ja-JP'):''}</div>${escapeHtml(c.text||'')}</div>`).join('')}
+    </div>` : ''}
   `);
   document.querySelectorAll('.ticket-item').forEach(el => el.classList.remove('active'));
   const activeEl = document.querySelector(`.ticket-item[data-id="${t.id}"]`);
@@ -483,7 +487,7 @@ document.addEventListener('paste', e => {
   }
 });
 
-msgInput.addEventListener('keydown', e => { if (e.key==='Enter'&&!e.shiftKey) { e.preventDefault(); sendMessage(); } });
+msgInput.addEventListener('keydown', e => { if (e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&e.keyCode!==229) { e.preventDefault(); sendMessage(); } });
 msgInput.addEventListener('input', () => { msgInput.style.height='auto'; msgInput.style.height=Math.min(msgInput.scrollHeight,100)+'px'; });
 
 async function sendMessage() {}

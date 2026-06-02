@@ -22,14 +22,20 @@ if [ -z "$FILE_ID" ] || [ -z "$CLAIMER" ] || [ -z "$DESC" ]; then
 fi
 
 # API経由でmeta.jsonlに保存
+# 値は環境変数で渡し、Pythonソースはシングルクォートにする。
+# （macOSの bash 3.2 では "$(... "..." ...)" 内のdictリテラル {..} がブレース展開で
+#  壊れるため。シングルクォートなら全bashで展開されず、特殊文字/改行も安全。）
+PAYLOAD=$(IRIE_FID="$FILE_ID" IRIE_DSC="$DESC" IRIE_CLM="$CLAIMER" python3 -c 'import json, os
+print(json.dumps({"id": os.environ["IRIE_FID"], "description": os.environ["IRIE_DSC"], "claimed_by": os.environ["IRIE_CLM"]}))')
 if ! curl -fsS -X POST "$API" \
   -H "Content-Type: application/json" \
-  -d "$(python3 -c "import json,sys; print(json.dumps({'id':sys.argv[1],'description':sys.argv[2],'claimed_by':sys.argv[3]}))" "$FILE_ID" "$DESC" "$CLAIMER")" \
+  -d "$PAYLOAD" \
   > /dev/null; then
   echo "DESCRIBE_FAILED" >&2
   exit 1
 fi
 
-# pending削除
-rm -f "$UPLOADS/${FILE_ID}.pending" "$UPLOADS/${FILE_ID}.pending.lock"
+# pending削除（Web UIは ${file_id}${ext}.pending で作るので glob で消す）
+rm -f "$UPLOADS/${FILE_ID}"*.pending "$UPLOADS/${FILE_ID}"*.pending.lock
+rmdir "$UPLOADS/${FILE_ID}"*.pending.lockd 2>/dev/null || true
 echo "DONE"

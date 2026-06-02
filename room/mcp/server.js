@@ -31,6 +31,9 @@ const LOG_FILE = process.env.IRIE_MCP_LOG || join(CONFIG_DIR, "mcp.log");
 // MCPサーバー自身の位置から iried.py を導出（設定ファイル無しでローカル動作可能にする）
 // このファイルは room/mcp/server.js → デーモンは room/bin/iried.py
 const DEFAULT_DAEMON = join(dirname(fileURLToPath(import.meta.url)), "..", "bin", "iried.py");
+// SSoTデータディレクトリの既定。server.js は room/mcp/ にあるので .. が room/。
+// 相対 "room" だとMCPサーバーのCWD（claude起動dir）依存になり、user スコープ等で破綻するため絶対化する。
+const DEFAULT_ROOM = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 // POSIX シェル用の最小クォート（リモートSSHコマンド文字列の injection 防止）
 function shq(s) { return `'${String(s).replace(/'/g, "'\\''")}'`; }
@@ -220,7 +223,7 @@ function callFinishClaim(fileId, description) {
 
 function loadUploadMeta() {
   const { room } = resolveConfig();
-  const metaPath = join(room || "room", "uploads", "meta.jsonl");
+  const metaPath = join(room || DEFAULT_ROOM, "uploads", "meta.jsonl");
   try {
     return readFileSync(metaPath, "utf8").split("\n").filter(Boolean).map(l => JSON.parse(l));
   } catch { return []; }
@@ -503,7 +506,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
         const result = callClaim(args.id);
         if (result.output === "CLAIMED") {
           const { room } = resolveConfig();
-          const imgPath = join(room || "room", "uploads", img.stored);
+          const imgPath = join(room || DEFAULT_ROOM, "uploads", img.stored);
           return { content: [
             { type: "text", text: `claim成功。画像を読んで irie_image_describe で説明を書いてください。` },
             { type: "image", data: readFileSync(imgPath).toString("base64"), mimeType: img.mime },
