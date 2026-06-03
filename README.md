@@ -50,7 +50,7 @@ irie-mcp/
 
 ### セットアップ
 
-前提: Node.js 18+, Python 3.10+
+前提: Node.js 18+, Python 3.9+（3.9.6 で動作確認済み。`match` 文等は未使用）
 
 #### ローカル最短（同一マシン・まずはこれ）
 
@@ -63,8 +63,9 @@ npm install --prefix room/mcp                  # MCP SDK を取得
 
 cp config.example.json room/config.json        # 参加者リスト（例はそのまま alice で動く）
 
-# Claude Code に MCP ツールとして追加（IRIE_WHO は config 内の自分の名前）
-claude mcp add irie --env IRIE_WHO=alice -- node "$PWD/room/mcp/server.js"
+# Claude Code に MCP ツールとして追加（IRIE_WHO=config 内の"このAI自身"の名前。例の config では AI は agent-a）
+# 既定は local スコープ（登録したプロジェクト内でのみ /mcp に出る）。home 等の別ディレクトリでも使うなら --scope user を付ける
+claude mcp add irie --scope user --env IRIE_WHO=agent-a -- node "$PWD/room/mcp/server.js"
 
 # 会議を開始（会議の開始は人間が行う。AIツール側からは開始できない）
 room/bin/room start "kickoff"
@@ -100,6 +101,8 @@ MCP設定のサンプル: Claude Code `examples/mcp/claude.mcp.json` / Codex `ex
 ```bash
 claude --dangerously-load-development-channels server:irie
 ```
+
+> ⚠️ これは `claude mcp add`（ツール登録）とは**別コマンド**です。1行に混ぜると `--env` が unknown option になります（`--env IRIE_WHO=...` は `claude mcp add` 側だけに付ける）。`server:irie` の `irie` は登録した MCPサーバー名で、`server:irie1` のような末尾数字は不要です。
 
 Codex など Channel 非対応クライアントは `IRIE_CHANNEL_PUSH=0` のままにし、`irie_pull` で新着を取得してください（有効のままだと背景pollが先に既読を進め、手動 `irie_pull` が「新着なし」になることがあります）。
 
@@ -206,7 +209,7 @@ Meeting logs, tickets, uploads and `config.json` (**runtime data**) live **outsi
 
 ### Setup
 
-Prerequisites: Node.js 18+, Python 3.10+
+Prerequisites: Node.js 18+, Python 3.9+ (verified on 3.9.6; no `match` statements used)
 
 #### Quickest: local (same machine — start here)
 
@@ -219,8 +222,9 @@ npm install --prefix room/mcp                  # fetch the MCP SDK
 
 cp config.example.json room/config.json        # member list (the sample 'alice' works as-is)
 
-# Add to Claude Code as an MCP tool (IRIE_WHO = your name in the config)
-claude mcp add irie --env IRIE_WHO=alice -- node "$PWD/room/mcp/server.js"
+# Add to Claude Code as an MCP tool (IRIE_WHO = this AI's own name in the config; agent-a is an AI in the sample)
+# Default scope is local (appears in /mcp only inside the registered project). Add --scope user to use it from any directory (e.g. home).
+claude mcp add irie --scope user --env IRIE_WHO=agent-a -- node "$PWD/room/mcp/server.js"
 
 # Start a meeting (humans start meetings; the AI tools cannot)
 room/bin/room start "kickoff"
@@ -258,6 +262,8 @@ Experimental: delivers unread messages to your existing session the moment you a
 ```bash
 claude --dangerously-load-development-channels server:irie
 ```
+
+> ⚠️ This is a **separate command** from `claude mcp add` (tool registration). Don't merge them into one line, or `--env` becomes an "unknown option" — `--env IRIE_WHO=...` belongs only to `claude mcp add`. In `server:irie`, `irie` is the MCP server name you registered; no trailing digit (e.g. `server:irie1`) is needed.
 
 For Codex and other non-Channel clients, keep `IRIE_CHANNEL_PUSH=0` and fetch new messages with `irie_pull`.
 
