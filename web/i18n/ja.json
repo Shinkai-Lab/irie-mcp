@@ -26,5 +26,17 @@
   "menu": "メニュー",
   "attachment": "[添付: {name} ({url})]",
   "config": "設定",
-  "edit_config": "設定を開く"
+  "edit_config": "設定を開く",
+  "comments": "コメント",
+  "no_tickets": "チケットなし",
+  "no_files": "ファイルなし",
+  "detail_empty": "カードをクリックするとここに詳細が開きます",
+  "detail_empty2": "ダブルクリックで看板ボード",
+  "welcome_hint": "カードをクリックで左下に詳細／ダブルクリックまたは「Board」で看板ボードを開く",
+  "board_sub": "カードをクリックで左下に詳細",
+  "chat": "チャット",
+  "in_meeting": "会議中",
+  "open_board": "看板",
+  "new_label": "新規",
+  "board_title": "チケット看板"
 }

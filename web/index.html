@@ -7,12 +7,14 @@
 <title>irie — 会議室</title>
 <link rel="icon" type="image/png" href="/irie-icon.png">
 <style>
+  /* ===== Themes (既存パレットを踏襲) ===== */
   :root, [data-theme="default"] {
     --bg-primary: #1a2a3a; --bg-secondary: #0f2030; --bg-input: #1a2a3a;
     --border: #1a6090; --accent: #e87040; --accent-hover: #d06030;
     --text: #e0e8f0; --text-muted: #8090a0; --text-success: #40c8a0;
     --highlight: #2090c0; --avatar-human: #e87040; --avatar-ai: #2090c0;
     --btn-text: #fff;
+    --col-open: #2070b0; --col-in_progress: #c08020; --col-done: #209060; --col-closed: #606060;
   }
   [data-theme="light"] {
     --bg-primary: #f0e8f4; --bg-secondary: #e0d0e8; --bg-input: #f8f0fc;
@@ -20,6 +22,7 @@
     --text: #3a2848; --text-muted: #8870a0; --text-success: #0eab6c;
     --highlight: #c078d8; --avatar-human: #e08090; --avatar-ai: #80b0d0;
     --btn-text: #fff;
+    --col-open: #6090c0; --col-in_progress: #c0a050; --col-done: #50a070; --col-closed: #a090a0;
   }
   [data-theme="dark"] {
     --bg-primary: #0a1628; --bg-secondary: #061020; --bg-input: #0a1628;
@@ -27,101 +30,153 @@
     --text: #d0d8e0; --text-muted: #607080; --text-success: #38b898;
     --highlight: #1868a8; --avatar-human: #e04860; --avatar-ai: #1868a8;
     --btn-text: #38b898;
+    --col-open: #1a5a90; --col-in_progress: #a07020; --col-done: #1a7050; --col-closed: #404850;
   }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: -apple-system, 'Segoe UI', sans-serif; background: var(--bg-primary); color: var(--text); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:-apple-system,'Segoe UI',sans-serif; background:var(--bg-primary); color:var(--text); height:100vh; display:flex; flex-direction:column; overflow:hidden; }
 
-  #header { padding: 8px 16px; background: var(--bg-secondary); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
-  #header h1 { font-size: 16px; color: var(--accent); }
-  #header .info { font-size: 12px; color: var(--text-muted); }
-  #header .status { font-size: 12px; color: var(--text-success); }
-  #menu-toggle { display: none; padding: 4px 8px; background: var(--highlight); color: var(--text-success); border: none; border-radius: 4px; font-size: 12px; cursor: pointer; }
+  /* ===== Header ===== */
+  #header { padding:8px 16px; background:var(--bg-secondary); border-bottom:1px solid var(--border); display:flex; align-items:center; gap:12px; flex-shrink:0; }
+  #header h1 { font-size:16px; color:var(--accent); }
+  #header .info { font-size:12px; color:var(--text-muted); }
+  #header .status { font-size:12px; color:var(--text-success); }
+  #menu-toggle { display:none; padding:4px 8px; background:var(--highlight); color:var(--btn-text); border:none; border-radius:4px; font-size:12px; cursor:pointer; }
+  #lang-btn { margin-left:auto; padding:2px 8px; background:var(--highlight); color:var(--btn-text); border:1px solid var(--border); border-radius:3px; font-size:11px; cursor:pointer; }
 
-  #main { flex: 1; display: flex; overflow: hidden; }
+  #main { flex:1; display:flex; overflow:hidden; }
 
-  /* === Left Menu Panel === */
-  #menu-panel { width: 220px; min-width: 140px; background: var(--bg-secondary); display: flex; flex-direction: column; overflow-y: auto; flex-shrink: 0; }
-  .section-header { padding: 8px 12px; font-size: 12px; font-weight: bold; color: var(--text-success); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; cursor: pointer; user-select: none; }
-  .section-header:hover { background: var(--highlight); }
+  /* ===== Left rail: tabs + quick view + detail ===== */
+  #rail { width:290px; flex-shrink:0; background:var(--bg-secondary); display:flex; flex-direction:column; min-height:0; }
+  .tab-bar { display:flex; gap:4px; padding:10px; border-bottom:1px solid var(--border); flex-shrink:0; }
+  .tab-btn { flex:1; padding:8px 0; text-align:center; border-radius:7px; border:1px solid transparent; background:var(--bg-input); cursor:pointer; font-size:16px; transition:all .15s; color:var(--text); }
+  .tab-btn span { display:block; font-size:8px; color:var(--text-muted); margin-top:2px; }
+  .tab-btn:hover { border-color:var(--border); }
+  .tab-btn.active { border-color:var(--accent); background:var(--bg-primary); }
 
-  /* Ticket items */
-  .ticket-item { padding: 6px 10px; font-size: 11px; cursor: pointer; border-left: 3px solid transparent; }
-  .ticket-item:hover { background: var(--highlight); }
-  .ticket-item.active { border-left-color: var(--accent); background: var(--highlight); }
-  .ticket-item .t-id { color: var(--text-muted); }
-  .ticket-item .t-title { color: var(--text); }
-  .ticket-status { display: inline-block; padding: 0 4px; border-radius: 2px; font-size: 9px; margin-left: 4px; }
-  .s-open { background: #2070b0; color: #fff; }
-  .s-in_progress { background: #c08020; color: #fff; }
-  .s-done { background: #209060; color: #fff; }
-  .s-closed { background: #606060; color: #fff; }
+  /* Quick View (Tickets タブのみ) */
+  #qv-zone { display:flex; flex-direction:column; min-height:0; flex:0 1 auto; max-height:46%; }
+  .qv-head { padding:11px 14px 6px; font-size:11px; font-weight:bold; color:var(--text-success); letter-spacing:.04em; text-transform:uppercase; display:flex; justify-content:space-between; align-items:center; gap:6px; flex-shrink:0; }
+  .qv-head .qv-actions { display:flex; gap:8px; }
+  .qv-hint { font-size:9px; color:var(--text-muted); font-weight:normal; text-transform:none; cursor:pointer; }
+  .qv-hint:hover { color:var(--accent); }
+  #quick-list { padding:4px 10px 8px; overflow-y:auto; }
+  .qv-card { background:var(--bg-input); border:1px solid var(--border); border-radius:8px; padding:9px 10px; margin-bottom:8px; cursor:pointer; border-left:3px solid var(--col-open); transition:transform .08s, border-color .15s; user-select:none; }
+  .qv-card:hover { border-color:var(--accent); transform:translateX(2px); }
+  .qv-card.sel { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent); }
+  .qv-card.in_progress { border-left-color:var(--col-in_progress); }
+  .qv-card.done { border-left-color:var(--col-done); }
+  .qv-card.closed { border-left-color:var(--col-closed); }
+  .qv-card .qv-top { display:flex; justify-content:space-between; align-items:center; gap:6px; margin-bottom:4px; }
+  .qv-card .qv-id { font-size:9px; color:var(--text-muted); }
+  .qv-card .qv-title { font-size:12px; line-height:1.35; color:var(--text); }
+  .qv-card .qv-meta { font-size:9px; color:var(--text-muted); margin-top:5px; display:flex; align-items:center; gap:5px; }
 
-  /* File items */
-  .file-item { padding: 6px 10px; font-size: 11px; cursor: pointer; }
-  .file-item:hover { background: var(--highlight); }
-  .file-item a { color: #6ca0dc; text-decoration: none; }
-  .file-item .f-meta { font-size: 9px; color: var(--text-muted); }
-  .file-item .thumb { width: 100%; max-height: 80px; object-fit: cover; border-radius: 3px; margin-bottom: 2px; }
+  .status-pill { font-size:8px; padding:2px 7px; border-radius:10px; color:#fff; white-space:nowrap; }
+  .p-open{background:var(--col-open)} .p-in_progress{background:var(--col-in_progress)} .p-done{background:var(--col-done)} .p-closed{background:var(--col-closed)}
+  .chip { width:15px; height:15px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:8px; color:#fff; margin-right:3px; }
 
-  #new-ticket-form { padding: 6px 10px; display: none; }
-  #new-ticket-form input, #new-ticket-form select { width: 100%; padding: 4px 6px; margin-bottom: 3px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 3px; color: var(--text); font-size: 11px; }
-  .section-btn { width: calc(100% - 20px); margin: 4px 10px; padding: 4px; background: var(--highlight); color: var(--btn-text); border: 1px solid var(--border); border-radius: 3px; cursor: pointer; font-size: 11px; }
-  .section-btn:hover { border-color: var(--text-success); }
-  #upload-area { padding: 4px 10px; }
-  #upload-area label { display: block; padding: 4px; text-align: center; border: 1px dashed var(--border); border-radius: 4px; cursor: pointer; font-size: 11px; color: var(--text-muted); }
-  #upload-area label:hover { border-color: var(--text-success); color: var(--text-success); }
-  #upload-area input { display: none; }
-  #upload-status { font-size: 10px; color: var(--text-success); text-align: center; }
+  /* Detail (多目的: チケ詳細 / Files / Config / Diagram) */
+  #rail-detail { flex:1 1 auto; border-top:2px solid var(--border); display:flex; flex-direction:column; min-height:0; background:var(--bg-primary); }
+  .rd-head { padding:9px 14px; font-size:11px; font-weight:bold; color:var(--accent); text-transform:uppercase; letter-spacing:.04em; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; flex-shrink:0; }
+  .rd-head .rd-id { color:var(--text-muted); font-weight:normal; }
+  #rail-detail-body { padding:13px 14px; overflow-y:auto; flex:1; }
+  .rd-empty { color:var(--text-muted); font-size:11px; text-align:center; margin-top:24px; line-height:1.7; }
+  .field { margin-bottom:13px; }
+  .field .label { font-size:10px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em; margin-bottom:4px; }
+  .field .value { font-size:12.5px; line-height:1.5; }
+  .field select, .field textarea, .field input { width:100%; background:var(--bg-input); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:6px 8px; font-size:12px; font-family:inherit; }
+  .field textarea { min-height:60px; resize:vertical; }
+  .comment { border-left:2px solid var(--border); padding:3px 0 3px 9px; margin-bottom:8px; white-space:pre-wrap; word-break:break-word; }
+  .comment .c-who { font-size:10px; color:var(--text-muted); margin-bottom:2px; }
+  .comment .c-txt { font-size:12px; line-height:1.45; }
+  .rd-btn { padding:6px 12px; background:var(--accent); color:#fff; border:none; border-radius:6px; cursor:pointer; font-size:12px; }
+  .rd-btn:hover { background:var(--accent-hover); }
+  .rd-btn.ghost { background:var(--highlight); }
 
-  /* === Resize Handles === */
-  .resize-handle { width: 4px; background: var(--highlight); cursor: col-resize; flex-shrink: 0; }
-  .resize-handle:hover { background: var(--accent); }
+  .file-item { padding:6px 0; font-size:12px; border-bottom:1px solid var(--border); }
+  .file-item a { color:var(--highlight); text-decoration:none; word-break:break-all; }
+  .file-item .f-meta { font-size:9px; color:var(--text-muted); }
+  .file-item .thumb { width:100%; max-height:90px; object-fit:cover; border-radius:4px; margin-bottom:3px; }
+  #upload-label { display:block; padding:8px; text-align:center; border:1px dashed var(--border); border-radius:6px; cursor:pointer; font-size:11px; color:var(--text-muted); margin-bottom:10px; }
+  #upload-label:hover { border-color:var(--text-success); color:var(--text-success); }
 
-  /* === Center Detail Panel === */
-  #detail-panel { width: 0; min-width: 0; background: var(--bg-input); display: none; flex-direction: column; overflow: hidden; }
-  #detail-panel.open { display: flex; width: 350px; min-width: 200px; }
-  #detail-header { padding: 8px 12px; background: var(--bg-secondary); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; font-size: 13px; flex-shrink: 0; }
-  #detail-header .close-btn { background: none; border: none; color: var(--accent); cursor: pointer; font-size: 16px; padding: 0 4px; }
-  #detail-content { flex: 1; overflow-y: auto; padding: 12px; font-size: 13px; line-height: 1.6; }
-  #detail-content .field { margin-bottom: 12px; }
-  #detail-content .field-label { font-size: 11px; color: var(--text-muted); margin-bottom: 2px; }
-  #detail-content .field-value { color: var(--text); }
-  #detail-content select, #detail-content input, #detail-content textarea { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 4px; color: var(--text); padding: 4px 8px; font-size: 12px; width: 100%; font-family: inherit; }
-  #detail-content textarea { min-height: 80px; resize: vertical; }
+  /* ===== Resize handles ===== */
+  .rz-col { width:5px; background:transparent; cursor:col-resize; flex-shrink:0; transition:background .15s; }
+  .rz-col:hover, .rz-col.drag { background:var(--accent); }
+  .rz-row { height:5px; background:transparent; cursor:row-resize; flex-shrink:0; transition:background .15s; }
+  .rz-row:hover, .rz-row.drag { background:var(--accent); }
+  #rz-board { display:none; }
+  #center.board-open #rz-board { display:block; }
 
-  /* === Right Chat Panel === */
-  #chat-panel { flex: 1; min-width: 280px; display: flex; flex-direction: column; }
-  #messages { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
-  .msg { display: flex; gap: 8px; align-items: flex-start; }
-  .msg .avatar { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; flex-shrink: 0; }
-  .msg .body { flex: 1; }
-  .msg .meta { font-size: 10px; color: var(--text-muted); margin-bottom: 1px; }
-  .msg .meta .name { font-weight: bold; margin-right: 6px; }
-  .msg .text { font-size: 13px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
-  .msg.system .text { font-style: italic; font-size: 11px; opacity: 0.5; }
-  /* アバター/名前の色は config の display_color から動的に付与する（addMessage参照） */
-  .avatar { background: var(--avatar-ai); color: #fff; }
-  .msg.system .avatar { background: var(--bg-secondary); color: var(--text-muted); }
-  .msg.system .name { color: var(--text-muted); }
+  /* ===== Center: chat (default, large) + board overlay (top, when open) ===== */
+  #center { flex:1; display:flex; flex-direction:column; overflow:hidden; min-width:0; }
 
-  .mention-badge { padding: 2px 8px; border-radius: 12px; font-size: 11px; cursor: pointer; user-select: none; border: 1px solid var(--border); color: var(--text-muted); background: transparent; transition: all 0.15s; }
-  .mention-badge.active { border-color: currentColor; color: #fff; }
-  .mention-badge:hover { opacity: 0.8; }
-  #attach-preview { display: none; padding: 3px 12px; background: var(--bg-secondary); font-size: 11px; color: var(--text-success); flex-shrink: 0; }
-  #input-area { padding: 8px 12px; background: var(--bg-secondary); border-top: 1px solid var(--border); display: flex; gap: 6px; align-items: flex-end; flex-shrink: 0; }
-  #input-area label { padding: 8px; cursor: pointer; font-size: 16px; color: var(--text-muted); flex-shrink: 0; }
-  #input-area textarea { flex: 1; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-input); color: var(--text); font-size: 13px; outline: none; font-family: inherit; line-height: 1.3; max-height: 100px; overflow-y: auto; resize: none; }
-  #input-area textarea:focus { border-color: var(--accent); }
-  #input-area button { padding: 8px 14px; background: var(--accent); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; flex-shrink: 0; align-self: flex-end; }
-  #input-area button:hover { background: var(--accent-hover); }
-  #input-area button:disabled { background: #555; cursor: not-allowed; }
+  #board-wrap { display:none; flex:none; height:62%; flex-direction:column; min-height:90px; }
+  #center.board-open #board-wrap { display:flex; }
+  .board-head { padding:9px 16px; display:flex; align-items:center; gap:10px; border-bottom:1px solid var(--border); background:var(--bg-secondary); flex-shrink:0; }
+  .board-head h2 { font-size:13px; color:var(--accent); }
+  .board-head .sub { font-size:11px; color:var(--text-muted); }
+  .board-head .spacer { margin-left:auto; }
+  .board-head .close-x { background:none; border:none; color:var(--accent); cursor:pointer; font-size:18px; line-height:1; padding:0 4px; }
+  #board { flex:1; display:flex; gap:12px; padding:14px; overflow-x:auto; overflow-y:hidden; }
+  .col { width:230px; flex-shrink:0; background:var(--bg-secondary); border-radius:10px; display:flex; flex-direction:column; max-height:100%; }
+  .col.closed-col { width:170px; }
+  .col-head { padding:9px 12px; font-size:11px; font-weight:bold; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); cursor:default; }
+  .col.closed-col .col-head { cursor:pointer; }
+  .col-head .dot { width:8px; height:8px; border-radius:50%; display:inline-block; margin-right:6px; }
+  .col-head .cnt { font-size:10px; color:var(--text-muted); background:var(--bg-input); border-radius:9px; padding:1px 7px; }
+  .col-body { padding:8px; overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:8px; }
+  .col.folded .col-body { display:none; }
 
-  @media (max-width: 700px) {
-    #menu-panel { display: none; }
-    #menu-toggle { display: block; }
-    #menu-panel.open { display: flex; position: absolute; top: 38px; left: 0; bottom: 0; z-index: 10; width: 220px; }
-    #detail-panel.open { position: absolute; top: 38px; left: 0; right: 0; bottom: 0; z-index: 9; width: auto !important; }
-    .resize-handle { display: none; }
+  .card { background:var(--bg-input); border:1px solid var(--border); border-radius:9px; padding:10px 11px; cursor:pointer; transition:transform .08s, border-color .15s, box-shadow .15s; }
+  .card:hover { border-color:var(--accent); transform:translateY(-2px); box-shadow:0 4px 14px rgba(0,0,0,.3); }
+  .card.sel { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent); }
+  .card .c-id { font-size:9px; color:var(--text-muted); }
+  .card .c-title { font-size:12.5px; line-height:1.4; margin:3px 0 8px; }
+  .card .c-foot { display:flex; align-items:center; justify-content:space-between; }
+  .card .c-foot .left { display:flex; align-items:center; gap:6px; font-size:9px; color:var(--text-muted); }
+  .card .tagline { height:4px; border-radius:3px; margin-bottom:8px; opacity:.8; }
+  /* #7 drag & drop */
+  .card.dragging { opacity:.45; }
+  .col.drop-target { outline:2px dashed var(--accent); outline-offset:-3px; background:rgba(160,160,160,.08); }
+  .col.drop-target.folded .col-body { display:flex; }   /* 折畳closedをドラッグ中だけ一時展開 */
+
+  /* chat (default large; shrinks to bottom when board open) */
+  #chat-wrap { flex:1; display:flex; flex-direction:column; background:var(--bg-primary); min-height:90px; border-top:2px solid var(--border); }
+  #center:not(.board-open) #chat-wrap { border-top:none; }
+  .chat-head { padding:7px 16px; font-size:11px; color:var(--text-muted); background:var(--bg-secondary); border-bottom:1px solid var(--border); display:flex; gap:8px; align-items:center; flex-shrink:0; }
+  #messages { flex:1; overflow-y:auto; padding:12px 16px; display:flex; flex-direction:column; gap:8px; }
+  .msg { display:flex; gap:8px; align-items:flex-start; }
+  .msg .avatar { width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:11px; flex-shrink:0; background:var(--avatar-ai); color:#fff; }
+  .msg .body { flex:1; }
+  .msg .meta { font-size:10px; color:var(--text-muted); margin-bottom:1px; }
+  .msg .meta .name { font-weight:bold; margin-right:6px; }
+  .msg .text { font-size:13px; line-height:1.5; white-space:pre-wrap; word-break:break-word; }
+  .msg.system .text { font-style:italic; font-size:11px; opacity:.5; }
+  .msg.system .avatar { background:var(--bg-secondary); color:var(--text-muted); }
+  .msg.system .name { color:var(--text-muted); }
+
+  #mention-bar { padding:4px 12px; display:flex; gap:4px; flex-shrink:0; flex-wrap:wrap; }
+  .mention-badge { padding:2px 8px; border-radius:12px; font-size:11px; cursor:pointer; user-select:none; border:1px solid var(--border); color:var(--text-muted); background:transparent; transition:all .15s; }
+  .mention-badge.active { border-color:currentColor; color:#fff; }
+  .mention-badge:hover { opacity:.8; }
+  #attach-preview { display:none; padding:3px 12px; background:var(--bg-secondary); font-size:11px; color:var(--text-success); flex-shrink:0; }
+  #input-area { padding:8px 12px; background:var(--bg-secondary); border-top:1px solid var(--border); display:flex; gap:6px; align-items:flex-end; flex-shrink:0; }
+  #input-area label { padding:8px; cursor:pointer; font-size:16px; color:var(--text-muted); flex-shrink:0; }
+  #input-area textarea { flex:1; padding:8px 10px; border:1px solid var(--border); border-radius:6px; background:var(--bg-input); color:var(--text); font-size:13px; outline:none; font-family:inherit; line-height:1.3; max-height:100px; overflow-y:auto; resize:none; }
+  #input-area textarea:focus { border-color:var(--accent); }
+  #input-area button { padding:8px 14px; background:var(--accent); color:#fff; border:none; border-radius:6px; cursor:pointer; font-size:13px; flex-shrink:0; align-self:flex-end; }
+  #input-area button:hover { background:var(--accent-hover); }
+  #input-area button:disabled { background:#555; cursor:not-allowed; }
+
+  ::-webkit-scrollbar { width:8px; height:8px; }
+  ::-webkit-scrollbar-thumb { background:var(--border); border-radius:4px; }
+
+  @media (max-width: 760px) {
+    #rail { display:none; width:auto !important; }
+    #rail.open { display:flex; position:absolute; top:45px; left:0; bottom:0; width:80% !important; z-index:10; border-right:1px solid var(--border); }
+    #menu-toggle { display:block; }
+    .rz-col, .rz-row { display:none !important; }
   }
 </style>
 </head>
@@ -130,98 +185,122 @@
 <div id="header">
   <img id="header-icon" src="/irie-icon-3.png" style="width:28px;height:28px;border-radius:50%;object-fit:cover;background:#fff;padding:1px;">
   <h1>irie</h1>
-  <button id="menu-toggle" onclick="document.getElementById('menu-panel').classList.toggle('open')">Menu</button>
+  <button id="menu-toggle" onclick="document.getElementById('rail').classList.toggle('open')">☰</button>
   <span class="info" id="meeting-id"></span>
   <span class="status">●</span>
-  <button onclick="switchLang()" style="margin-left:auto;padding:2px 8px;background:#0f3460;color:#4ecca3;border:1px solid #0f3460;border-radius:3px;font-size:11px;cursor:pointer;" id="lang-btn">EN/JA</button>
+  <button id="lang-btn" onclick="switchLang()">EN/JA</button>
 </div>
 
 <div id="main">
-  <!-- Left: Menu -->
-  <div id="menu-panel">
-    <div class="section-header" onclick="toggleSection('tickets')"><span data-i18n="tickets">Tickets</span><span id="ticket-count">0</span></div>
-    <div id="ticket-list"></div>
-    <div id="new-ticket-form">
-      <input type="text" id="ticket-title" placeholder="タイトル" data-i18n-placeholder="title_placeholder">
-      <select id="ticket-assignee"><option value="" data-i18n="unassigned">未アサイン</option></select>
-      <input type="text" id="ticket-desc" placeholder="詳細（任意）" data-i18n-placeholder="desc_placeholder">
-      <button class="section-btn" onclick="createTicket()" data-i18n="create">作成</button>
-    </div>
-    <button class="section-btn" onclick="showNewTicket()" data-i18n="new_ticket">+ チケット</button>
 
-    <div class="section-header" onclick="toggleSection('files')"><span data-i18n="files">Files</span><span id="file-count">0</span></div>
-    <div id="file-list"></div>
-    <div id="upload-area">
-      <label for="file-input" data-i18n="upload">+ アップロード</label>
-      <input type="file" id="file-input" onchange="attachFile(this)">
-      <div id="upload-status"></div>
+  <!-- ===== Left rail: tabs + quick view + detail ===== -->
+  <div id="rail">
+    <div class="tab-bar">
+      <div class="tab-btn active" id="tool-tickets" title="チケット" onclick="setTab('tickets')">📋<span data-i18n="tickets">Tickets</span></div>
+      <div class="tab-btn" id="tool-files" title="ファイル" onclick="setTab('files')">📎<span data-i18n="files">Files</span></div>
+      <div class="tab-btn" id="tool-diagram" title="図表" onclick="setTab('diagram')" style="display:none">🧩<span>Diagram</span></div>
+      <div class="tab-btn" id="tool-config" title="設定" onclick="setTab('config')">⚙️<span data-i18n="config">Config</span></div>
     </div>
 
-    <!-- Diagram は別配布のプラグイン。config に plugins.diagram=true がある時だけ表示する -->
-    <div id="diagram-plugin" style="display:none">
-      <div class="section-header" onclick="toggleSection('diagram')"><span>Diagram</span></div>
-      <div id="diagram-section">
-        <button class="section-btn" onclick="openDiagramPanel()">図表エディタ</button>
+    <!-- Quick View（Tickets タブのみ表示） -->
+    <div id="qv-zone">
+      <div class="qv-head"><span>Quick View</span><span class="qv-actions">
+        <span class="qv-hint" id="qv-open-board" onclick="openBoard()" title="看板を開く">📋 <span data-i18n="open_board">看板</span></span>
+        <span class="qv-hint" onclick="showNewTicket()" title="新規チケット">＋ <span data-i18n="new_label">新規</span></span>
+      </span></div>
+      <div id="quick-list"></div>
+    </div>
+
+    <!-- QuickView ↔ Detail 境界（Tickets タブのみ） -->
+    <div class="rz-row" id="rz-qv"></div>
+
+    <!-- 多目的 Detail -->
+    <div id="rail-detail">
+      <div class="rd-head"><span id="rd-label">Detail</span><span class="rd-id" id="rd-id"></span></div>
+      <div id="rail-detail-body"></div>
+    </div>
+  </div>
+
+  <!-- レール ↔ 中央 境界（幅） -->
+  <div class="rz-col" id="rz-rail"></div>
+
+  <!-- ===== Center: chat (large, default) + board overlay (top, when open) ===== -->
+  <div id="center">
+    <div id="board-wrap">
+      <div class="board-head">
+        <h2>📋 <span data-i18n="board_title">チケット看板</span></h2>
+        <span class="sub" data-i18n="board_sub">カードをクリックで左下に詳細</span>
+        <span class="spacer"></span>
+        <button class="rd-btn ghost" onclick="showNewTicket()" data-i18n="new_ticket">＋ チケット</button>
+        <button class="close-x" onclick="closeBoard()" title="閉じる">✕</button>
+      </div>
+      <div id="board"></div>
+    </div>
+
+    <!-- 看板 ↔ チャット 境界（高さ・看板オープン時） -->
+    <div class="rz-row" id="rz-board"></div>
+
+    <div id="chat-wrap">
+      <div class="chat-head">💬 <span data-i18n="chat">チャット</span><span style="color:var(--text-success)">● <span data-i18n="in_meeting">会議中</span></span></div>
+      <div id="messages"></div>
+      <div id="mention-bar"></div>
+      <div id="attach-preview"><span id="attach-name"></span><button onclick="clearAttach()" style="background:none;border:none;color:var(--accent);cursor:pointer;margin-left:6px;">✕</button></div>
+      <div id="input-area">
+        <label for="chat-file-input" title="ファイル添付">＋</label>
+        <input type="file" id="chat-file-input" style="display:none" onchange="attachFile(this)">
+        <textarea id="msg-input" placeholder="メッセージ（Ctrl+Vで画像貼付）" data-i18n-placeholder="msg_placeholder" rows="1"></textarea>
+        <button id="send-btn" onclick="sendMessage()" data-i18n="send">送信</button>
       </div>
     </div>
-
-    <div class="section-header" onclick="toggleSection('config')"><span data-i18n="config">Config</span></div>
-    <div id="config-section">
-      <button class="section-btn" onclick="openConfigPanel()" data-i18n="edit_config">設定を開く</button>
-    </div>
   </div>
 
-  <div class="resize-handle" id="resize-left"></div>
-
-  <!-- Center: Detail -->
-  <div id="detail-panel">
-    <div id="detail-header">
-      <span id="detail-title" data-i18n="detail">詳細</span>
-      <button class="close-btn" onclick="closeDetail()">×</button>
-    </div>
-    <div id="detail-content"></div>
-  </div>
-
-  <div class="resize-handle" id="resize-right"></div>
-
-  <!-- Right: Chat -->
-  <div id="chat-panel">
-    <div id="messages"></div>
-    <div id="mention-bar" style="padding:4px 12px;display:flex;gap:4px;flex-shrink:0;"></div>
-    <div id="attach-preview"><span id="attach-name"></span><button onclick="clearAttach()" style="background:none;border:none;color:#e94560;cursor:pointer;margin-left:6px;">✕</button></div>
-    <div id="input-area">
-      <label for="chat-file-input" title="ファイル添付">+</label>
-      <input type="file" id="chat-file-input" style="display:none" onchange="attachFile(this)">
-      <textarea id="msg-input" placeholder="メッセージ（Ctrl+Vで画像貼付）" data-i18n-placeholder="msg_placeholder" rows="1"></textarea>
-      <button id="send-btn" onclick="sendMessage()" data-i18n="send">送信</button>
-    </div>
-  </div>
 </div>
 
 <script>
-// IRIE_API_TOKEN を要求するサーバー向け。トークンは localStorage['irie-token'] に保存して送る。
-// 初回プロビジョニングは #token=...（フラグメントはサーバーに送られない）または ?token=... で渡せる。
-// 受け取ったら即座に URL から除去し、履歴・アドレスバー・Referer にトークンを残さない。
+// ===== Token provisioning (#token=... / ?token=... は受け取り次第 URL から除去) =====
 (function() {
   const fromQuery = new URLSearchParams(location.search).get('token');
   const fromHash = new URLSearchParams((location.hash || '').replace(/^#/, '')).get('token');
   const provided = fromHash || fromQuery;
   if (provided) {
     localStorage.setItem('irie-token', provided);
-    history.replaceState(null, '', location.pathname);  // ?token / #token を URL から消す
+    history.replaceState(null, '', location.pathname);
   }
 })();
 const API_TOKEN = localStorage.getItem('irie-token') || '';
 function authH(base) { const h = Object.assign({}, base || {}); if (API_TOKEN) h['X-Irie-Token'] = API_TOKEN; return h; }
 // CSS/属性に差し込む色は hex のみ許可（display_color 経由の CSS/HTML インジェクション防止）
 function safeColor(c) { return /^#[0-9a-fA-F]{3,8}$/.test(c || '') ? c : ''; }
-// API はこの UI を配信しているのと同一オリジン（ポートは IRIE_PORT に追従）
 const API_BASE = `${location.origin}/api`;
+
+// ===== State =====
+const STATUS = {
+  open:        { label:'Open',        dot:'var(--col-open)',        cls:'p-open' },
+  in_progress: { label:'In Progress', dot:'var(--col-in_progress)', cls:'p-in_progress' },
+  done:        { label:'Done',        dot:'var(--col-done)',        cls:'p-done' },
+  closed:      { label:'Closed',      dot:'var(--col-closed)',      cls:'p-closed' },
+};
+const STATUS_ORDER = ['open','in_progress','done','closed'];
 let lastSeq = 0;
 let i18n = {};
 let myName = '';
-let currentLang = localStorage.getItem('irie-lang') || navigator.language.startsWith('ja') ? 'ja' : 'en';
+let currentLang = (localStorage.getItem('irie-lang') || (navigator.language.startsWith('ja') ? 'ja' : 'en'));
+const shownSeqs = new Set();
+let pendingFile = null;
+let _configCache = { members: [] };
+let _ticketsCache = [];
+let _filesCache = [];
+let selectedId = null;
+let _selectedSnapshot = null;  // 表示中チケットのスナップショット（#8: 無変化なら再描画しない）
+let activeTab = 'tickets';     // tickets | files | config | diagram
+let boardOpen = false;         // 看板オーバーレイ（Tickets タブ専用）
+let closedFolded = true;
+const activeMentions = new Set();
 
+const msgInput = document.getElementById('msg-input');
+const messagesDiv = document.getElementById('messages');
+
+// ===== i18n =====
 async function loadI18n(lang) {
   try {
     const res = await fetch(`${location.origin}/i18n/${lang}.json`);
@@ -234,86 +313,243 @@ function t(key, vars) {
   return s;
 }
 function applyI18n() {
-  document.title = t('app_title');
-  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
-  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => { el.placeholder = t(el.dataset.i18nPlaceholder); });
-  document.querySelectorAll('[data-i18n-title]').forEach(el => { el.title = t(el.dataset.i18nTitle); });
+  if (i18n.app_title) document.title = i18n.app_title;
+  document.querySelectorAll('[data-i18n]').forEach(el => { const v = i18n[el.dataset.i18n]; if (v) el.textContent = v; });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => { const v = i18n[el.dataset.i18nPlaceholder]; if (v) el.placeholder = v; });
 }
-function switchLang() {
-  loadI18n(currentLang === 'ja' ? 'en' : 'ja');
-}
-const shownSeqs = new Set();
-let pendingFile = null;
+function switchLang() { loadI18n(currentLang === 'ja' ? 'en' : 'ja'); }
 
-const msgInput = document.getElementById('msg-input');
-const messagesDiv = document.getElementById('messages');
-
-// --- Resize handles ---
-function initResize(handleId, leftEl, rightEl) {
-  const handle = document.getElementById(handleId);
-  if (!handle) return;
-  let startX, startLeftW, startRightW;
-  handle.addEventListener('mousedown', e => {
-    e.preventDefault();
-    startX = e.clientX;
-    const left = leftEl ? document.getElementById(leftEl) : null;
-    const right = rightEl ? document.getElementById(rightEl) : null;
-    if (left) startLeftW = left.offsetWidth;
-    if (right) startRightW = right.offsetWidth;
-    const onMove = e2 => {
-      const dx = e2.clientX - startX;
-      if (left) left.style.width = Math.max(100, startLeftW + dx) + 'px';
-    };
-    const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-  });
+// ===== Helpers =====
+function escapeHtml(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+function avatarInitial(n) { return n === 'system' ? 'S' : (Array.from(n || '')[0] || '?'); }
+function formatSize(b) { return b<1024?b+'B':b<1048576?(b/1024).toFixed(1)+'KB':(b/1048576).toFixed(1)+'MB'; }
+function scrollToBottom() { messagesDiv.scrollTop = messagesDiv.scrollHeight; }
+function memberColor(name) { const m = (_configCache.members || []).find(x => x.name === name); return safeColor(m && m.display_color); }
+function chip(name) {
+  if (!name) return `<span style="opacity:.6">${escapeHtml(t('unassigned'))}</span>`;
+  const c = memberColor(name) || '#7890a0';
+  return `<span class="chip" style="background:${c}">${escapeHtml(avatarInitial(name))}</span>${escapeHtml(name)}`;
 }
-initResize('resize-left', 'menu-panel', null);
-initResize('resize-right', 'detail-panel', null);
+function fmtTime(s) { try { return s ? new Date(s).toLocaleString('ja-JP') : ''; } catch(e) { return escapeHtml(s||''); } }
 
-// --- Detail panel ---
-function openDetail(title, html) {
-  document.getElementById('detail-title').textContent = title;
-  document.getElementById('detail-content').innerHTML = html;
-  document.getElementById('detail-panel').classList.add('open');
+// ===== Tabs (Tickets/Files/Config/Diagram) =====
+function setTab(name) {
+  activeTab = name;
+  ['tickets','files','config','diagram'].forEach(k => document.getElementById('tool-'+k)?.classList.toggle('active', k===name));
+  // Quick View（＋その境界ハンドル）は Tickets タブのみ
+  const isTickets = name === 'tickets';
+  document.getElementById('qv-zone').style.display = isTickets ? '' : 'none';
+  document.getElementById('rz-qv').style.display = (isTickets && !isMobile()) ? '' : 'none';
+  // 看板は Tickets タブ専用オーバーレイ：他タブでは自動で畳む（boardOpen 状態は保持＝復帰時に復元）
+  renderCenter();
+  if (isTickets) {
+    if (selectedId != null && _ticketsCache.find(x => x.id === selectedId)) selectTicket(selectedId);
+    else renderDetailEmpty();
+  } else {
+    selectedId = null; markSelected(null);
+    if (name === 'files') renderFilesView();
+    else if (name === 'config') renderConfigView();
+    else if (name === 'diagram') renderDiagramView();
+  }
 }
-function closeDetail() {
-  document.getElementById('detail-panel').classList.remove('open');
+function setRdLabel(label, id) {
+  document.getElementById('rd-label').textContent = label;
+  document.getElementById('rd-id').textContent = id || '';
+}
+function renderDetailEmpty() {
+  setRdLabel(t('detail'), '');
+  document.getElementById('rail-detail-body').innerHTML =
+    `<div class="rd-empty">${escapeHtml(t('detail_empty'))}<br><br>${escapeHtml(t('detail_empty2'))}</div>`;
 }
 
-function openTicketDetail(t) {
-  const statuses = ['open','in_progress','done','closed'];
+// ===== 看板オーバーレイ（中央上段） =====
+function renderCenter() {
+  const open = (activeTab === 'tickets' && boardOpen);
+  document.getElementById('center').classList.toggle('board-open', open);
+  // 開く導線はオープン中は隠す
+  const ob = document.getElementById('qv-open-board');
+  if (ob) ob.style.display = open ? 'none' : '';
+  if (open) { renderBoard(); applyBoardHeight(); }
+  scrollToBottom();
+}
+function openBoard() { boardOpen = true; if (activeTab !== 'tickets') setTab('tickets'); else renderCenter(); }
+function closeBoard() { boardOpen = false; renderCenter(); }
+
+// ===== Quick View (最新チケット 3件) =====
+function renderQuick() {
+  const key = tk => tk.updated_at || tk.created_at || '';
+  const recent = [..._ticketsCache].sort((a,b) => (key(b)).localeCompare(key(a)) || (b.id||0)-(a.id||0)).slice(0,3);
+  const html = recent.map(tk => {
+    const cls = STATUS[tk.status] ? tk.status : 'open';
+    let ut = '';
+    try { const d = key(tk); if (d) ut = new Date(d).toLocaleString('ja-JP',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}); } catch(e) {}
+    return `<div class="qv-card ${cls}" id="qv-${tk.id}" onclick="selectTicket(${tk.id})" ondblclick="openBoard();selectTicket(${tk.id})">
+      <div class="qv-top"><span class="qv-id">#${tk.id}</span><span class="status-pill ${(STATUS[tk.status]||STATUS.open).cls}">${(STATUS[tk.status]||STATUS.open).label}</span></div>
+      <div class="qv-title">${escapeHtml(tk.title)}</div>
+      <div class="qv-meta">${chip(tk.assignee)}${ut?' · '+escapeHtml(ut):''}</div>
+    </div>`;
+  }).join('');
+  document.getElementById('quick-list').innerHTML = html || `<div class="rd-empty" style="margin-top:8px">${escapeHtml(t('no_tickets'))}</div>`;
+  if (selectedId != null) markSelected(selectedId);
+}
+
+// ===== Board =====
+function renderBoard() {
+  const board = document.getElementById('board');
+  board.innerHTML = STATUS_ORDER.map(st => {
+    const items = _ticketsCache.filter(tk => (tk.status||'open') === st);
+    const isClosed = st === 'closed';
+    const folded = isClosed && closedFolded;
+    return `<div class="col ${isClosed?'closed-col':''} ${folded?'folded':''}" data-col="${st}" ondragover="colDragOver(event,this)" ondragleave="colDragLeave(event,this)" ondrop="colDrop(event,'${st}')">
+      <div class="col-head" ${isClosed?`onclick="toggleClosed()"`:''}>
+        <span><span class="dot" style="background:${STATUS[st].dot}"></span>${isClosed&&folded?'▶ ':''}${STATUS[st].label}</span>
+        <span class="cnt">${items.length}</span>
+      </div>
+      <div class="col-body">${items.map(cardHtml).join('')}</div>
+    </div>`;
+  }).join('');
+  if (selectedId != null) markSelected(selectedId);
+}
+function cardHtml(tk) {
+  const n = (tk.comments && tk.comments.length) ? tk.comments.length : 0;
+  return `<div class="card" id="card-${tk.id}" draggable="true" ondragstart="cardDragStart(event,${tk.id})" ondragend="cardDragEnd(event)" onclick="cardClick(${tk.id})">
+    <div class="tagline" style="background:${(STATUS[tk.status]||STATUS.open).dot}"></div>
+    <div class="c-id">#${tk.id}</div>
+    <div class="c-title">${escapeHtml(tk.title)}</div>
+    <div class="c-foot"><span class="left">${chip(tk.assignee)}</span><span class="left">${n?('💬 '+n):''}</span></div>
+  </div>`;
+}
+function toggleClosed() { closedFolded = !closedFolded; renderBoard(); }
+
+// ===== #7 看板 drag & drop（status 変更・楽観更新） =====
+let _dragTid = null;
+let _lastDragEnd = 0;
+function cardDragStart(e, id) {
+  _dragTid = id;
+  try { e.dataTransfer.setData('text/plain', String(id)); e.dataTransfer.effectAllowed = 'move'; } catch(_) {}
+  document.getElementById('card-'+id)?.classList.add('dragging');
+}
+function cardDragEnd(e) {
+  if (_dragTid != null) document.getElementById('card-'+_dragTid)?.classList.remove('dragging');
+  document.querySelectorAll('.col.drop-target').forEach(c => c.classList.remove('drop-target'));
+  _dragTid = null;
+  _lastDragEnd = Date.now();   // 直後の click（selectTicket）誤爆を抑止
+}
+function cardClick(id) {
+  if (Date.now() - _lastDragEnd < 250) return;   // ドラッグ直後のクリックは無視
+  selectTicket(id);
+}
+function colDragOver(e, col) {
+  if (_dragTid == null) return;
+  e.preventDefault();
+  try { e.dataTransfer.dropEffect = 'move'; } catch(_) {}
+  col.classList.add('drop-target');
+}
+function colDragLeave(e, col) {
+  if (!col.contains(e.relatedTarget)) col.classList.remove('drop-target');
+}
+function colDrop(e, st) {
+  e.preventDefault();
+  const col = e.currentTarget; if (col) col.classList.remove('drop-target');
+  const id = _dragTid; _dragTid = null;
+  if (id == null) return;
+  const tk = _ticketsCache.find(x => x.id === id);
+  if (!tk || (tk.status || 'open') === st) return;   // 同列ドロップ=no-op
+  // 楽観更新：DOM即移動→サーバ確定→次loadTicketsで整合（失敗時は再描画で自己修復）
+  tk.status = st;
+  renderBoard();
+  if (activeTab === 'tickets') renderQuick();
+  updateTicketField(id, 'status', st);
+}
+
+// ===== Chat =====
+function addMessage(msg) {
+  const div = document.createElement('div');
+  div.className = `msg ${msg.author==='system'?'system':''}`;
+  const color = msg.author === 'system' ? '' : memberColor(msg.author);
+  const avatarStyle = color ? ` style="background:${color}"` : '';
+  const nameStyle = color ? ` style="color:${color}"` : '';
+  div.innerHTML = `
+    <div class="avatar"${avatarStyle}>${escapeHtml(avatarInitial(msg.author))}</div>
+    <div class="body">
+      <div class="meta"><span class="name"${nameStyle}>${escapeHtml(msg.author)}</span><span>${new Date(msg.ts).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})}</span></div>
+      <div class="text">${escapeHtml(msg.text)}</div>
+    </div>`;
+  messagesDiv.appendChild(div);
+}
+
+// ===== Ticket detail (rail-detail 下段) =====
+function selectTicket(id) {
+  const tk = _ticketsCache.find(x => x.id === id);
+  if (!tk) return;
+  selectedId = id;
+  if (activeTab !== 'tickets') setTab('tickets');
+  markSelected(id);
+  setRdLabel(t('detail'), `#${tk.id}`);
   const assignees = ['', ...(_configCache.members || []).map(m => m.name)];
-  openDetail(`#${t.id} ${t.title}`, `
-    <div class="field"><div class="field-label">タイトル</div><div class="field-value">${escapeHtml(t.title)}</div></div>
-    <div class="field"><div class="field-label">ステータス</div>
-      <select onchange="updateTicketField(${t.id},'status',this.value)">
-        ${statuses.map(s=>`<option value="${s}" ${s===t.status?'selected':''}>${s}</option>`).join('')}
-      </select>
-    </div>
-    <div class="field"><div class="field-label">担当</div>
-      <select onchange="updateTicketField(${t.id},'assignee',this.value)">
-        ${assignees.map(a=>`<option value="${a}" ${a===t.assignee?'selected':''}>${a||'未アサイン'}</option>`).join('')}
-      </select>
-    </div>
-    <div class="field"><div class="field-label">詳細</div>
-      <textarea onblur="updateTicketField(${t.id},'description',this.value)">${escapeHtml(t.description||'')}</textarea>
-    </div>
-    <div class="field"><div class="field-label">作成</div><div class="field-value">${escapeHtml(t.created_by)} · ${new Date(t.created_at).toLocaleString('ja-JP')}</div></div>
-    ${(t.comments && t.comments.length) ? `<div class="field"><div class="field-label">コメント (${t.comments.length})</div>
-      ${t.comments.map(c=>`<div class="field-value" style="white-space:pre-wrap;border-left:2px solid var(--border);padding-left:8px;margin-bottom:8px">
-        <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px">${escapeHtml(c.author||'')}${c.ts?' · '+new Date(c.ts).toLocaleString('ja-JP'):''}</div>${escapeHtml(c.text||'')}</div>`).join('')}
-    </div>` : ''}
-  `);
-  document.querySelectorAll('.ticket-item').forEach(el => el.classList.remove('active'));
-  const activeEl = document.querySelector(`.ticket-item[data-id="${t.id}"]`);
-  if (activeEl) activeEl.classList.add('active');
+  document.getElementById('rail-detail-body').innerHTML = `
+    <div class="field"><div class="label">${escapeHtml(t('title_label'))}</div><div class="value">${escapeHtml(tk.title)}</div></div>
+    <div class="field"><div class="label">${escapeHtml(t('status_label'))}</div>
+      <select onchange="updateTicketField(${tk.id},'status',this.value)">
+        ${STATUS_ORDER.map(s=>`<option value="${s}" ${s===tk.status?'selected':''}>${STATUS[s].label}</option>`).join('')}
+      </select></div>
+    <div class="field"><div class="label">${escapeHtml(t('assignee_label'))}</div>
+      <select onchange="updateTicketField(${tk.id},'assignee',this.value)">
+        ${assignees.map(a=>`<option value="${escapeHtml(a)}" ${a===(tk.assignee||'')?'selected':''}>${a?escapeHtml(a):escapeHtml(t('unassigned'))}</option>`).join('')}
+      </select></div>
+    <div class="field"><div class="label">${escapeHtml(t('desc_label'))}</div>
+      <textarea onblur="updateTicketField(${tk.id},'description',this.value)">${escapeHtml(tk.description||'')}</textarea></div>
+    <div class="field"><div class="label">${escapeHtml(t('created_label'))}</div><div class="value">${escapeHtml(tk.created_by||'')} · ${fmtTime(tk.created_at)}</div></div>
+    ${(tk.comments && tk.comments.length) ? `<div class="field"><div class="label">${escapeHtml(t('comments'))} (${tk.comments.length})</div>
+      ${tk.comments.map(c=>`<div class="comment"><div class="c-who">${escapeHtml(c.author||'')}${c.ts?' · '+fmtTime(c.ts):''}</div><div class="c-txt">${escapeHtml(c.text||'')}</div></div>`).join('')}
+    </div>` : ''}`;
+  _selectedSnapshot = JSON.stringify(tk);   // #8: 次回ポーリングでの無変化スキップ用スナップショット
+}
+function markSelected(id) {
+  document.querySelectorAll('.qv-card,.card').forEach(c => c.classList.remove('sel'));
+  if (id == null) return;
+  document.getElementById('qv-'+id)?.classList.add('sel');
+  document.getElementById('card-'+id)?.classList.add('sel');
 }
 
+// ===== New ticket form (rail-detail) =====
+function showNewTicket() {
+  if (activeTab !== 'tickets') setTab('tickets');
+  selectedId = null; markSelected(null);
+  setRdLabel(t('new_ticket'), '');
+  const opts = ['', ...(_configCache.members || []).map(m => m.name)];
+  document.getElementById('rail-detail-body').innerHTML = `
+    <div class="field"><div class="label">${escapeHtml(t('title_label'))}</div><input id="nt-title" placeholder="${escapeHtml(t('title_placeholder'))}"></div>
+    <div class="field"><div class="label">${escapeHtml(t('assignee_label'))}</div>
+      <select id="nt-assignee">${opts.map(a=>`<option value="${escapeHtml(a)}">${a?escapeHtml(a):escapeHtml(t('unassigned'))}</option>`).join('')}</select></div>
+    <div class="field"><div class="label">${escapeHtml(t('desc_label'))}</div><textarea id="nt-desc" placeholder="${escapeHtml(t('desc_placeholder'))}"></textarea></div>
+    <button class="rd-btn" onclick="createTicket()">${escapeHtml(t('create'))}</button>`;
+  document.getElementById('nt-title').focus();
+}
+async function createTicket() {
+  const title = document.getElementById('nt-title').value.trim();
+  if (!title) return;
+  const assignee = document.getElementById('nt-assignee').value;
+  const desc = document.getElementById('nt-desc')?.value || '';
+  try {
+    const res = await fetch(`${API_BASE}/tickets/create`, {
+      method:'POST', headers:authH({'Content-Type':'application/json'}),
+      body: JSON.stringify({ title, assignee: assignee||null, created_by: myName || undefined, description: desc })
+    });
+    const data = await res.json();
+    if (data.ok && data.ticket) {
+      const tk = data.ticket;
+      await fetch(`${API_BASE}/post`, { method:'POST', headers:authH({'Content-Type':'application/json'}),
+        body: JSON.stringify({ author: myName || undefined, text:`[チケット作成] #${tk.id} ${tk.title}${tk.assignee?' → '+tk.assignee:''}` }) });
+      await loadTickets(); await poll();
+      selectTicket(tk.id);
+    }
+  } catch(e) {}
+}
+
+// ===== Ticket update =====
 async function updateTicketField(id, field, value) {
-  const body = { id };
-  body[field] = value;
+  const body = { id }; body[field] = value;
   try {
     const res = await fetch(`${API_BASE}/tickets/update`, {
       method: 'POST', headers: authH({'Content-Type':'application/json'}), body: JSON.stringify(body)
@@ -326,155 +562,105 @@ async function updateTicketField(id, field, value) {
       });
       await poll();
     }
-    loadTickets();
-  } catch(e) {}
+  } catch(e) {
+  } finally {
+    // #7 nit(a): fetch が throw しても必ず照合＝楽観更新を即時に自己修復（最大5s残りを解消）
+    await loadTickets();
+  }
 }
 
-// --- Helpers ---
-function toggleSection(name) {
-  const el = document.getElementById(name === 'tickets' ? 'ticket-list' : 'file-list');
-  el.style.display = el.style.display === 'none' ? '' : 'none';
-}
-function showNewTicket() {
-  const f = document.getElementById('new-ticket-form');
-  f.style.display = f.style.display === 'none' ? 'block' : 'none';
-}
-function avatarInitial(n) { return n === 'system' ? 'S' : (Array.from(n || '')[0] || '?'); }
-function escapeHtml(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
-function formatSize(b) { return b<1024?b+'B':b<1048576?(b/1024).toFixed(1)+'KB':(b/1048576).toFixed(1)+'MB'; }
-function scrollToBottom() { messagesDiv.scrollTop = messagesDiv.scrollHeight; }
-function memberColor(name) {
-  const m = (_configCache.members || []).find(x => x.name === name);
-  return safeColor(m && m.display_color);
+// ===== Files view (rail-detail) =====
+function renderFilesView() {
+  setRdLabel('Files', '');
+  const items = [..._filesCache].sort((a,b)=> (b.ts||'').localeCompare(a.ts||''));
+  const list = items.map(f => {
+    const url = `${location.origin}/uploads/${encodeURIComponent(f.stored)}`;
+    return `<div class="file-item">${f.is_image?`<img class="thumb" src="${url}">`:''}<a href="${url}" target="_blank" rel="noopener">${escapeHtml(f.name)}</a><div class="f-meta">${escapeHtml(f.author||'')} · ${formatSize(f.size||0)}</div></div>`;
+  }).join('');
+  document.getElementById('rail-detail-body').innerHTML =
+    `<label id="upload-label" for="rail-file-input">${escapeHtml(t('upload'))}</label>
+     <input type="file" id="rail-file-input" style="display:none" onchange="attachFile(this)">
+     ${list || `<div class="rd-empty">${escapeHtml(t('no_files'))}</div>`}`;
 }
 
-function addMessage(msg) {
-  const div = document.createElement('div');
-  div.className = `msg ${msg.author==='system'?'system':''}`;
-  const color = msg.author === 'system' ? '' : memberColor(msg.author);
-  const avatarStyle = color ? ` style="background:${escapeHtml(color)}"` : '';
-  const nameStyle = color ? ` style="color:${escapeHtml(color)}"` : '';
-  div.innerHTML = `
-    <div class="avatar"${avatarStyle}>${escapeHtml(avatarInitial(msg.author))}</div>
-    <div class="body">
-      <div class="meta"><span class="name"${nameStyle}>${escapeHtml(msg.author)}</span><span>${new Date(msg.ts).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})}</span></div>
-      <div class="text">${escapeHtml(msg.text)}</div>
+// ===== Config view (rail-detail) =====
+function renderConfigView() {
+  setRdLabel('Config', '');
+  const curTheme = localStorage.getItem('irie-theme') || 'default';
+  const themes = [ {id:'default', label:'Default'}, {id:'light', label:'Light'}, {id:'dark', label:'Dark'} ];
+  let html = `<div class="field"><div class="label">Theme</div><div style="display:flex;gap:4px;">`;
+  themes.forEach(th => {
+    const active = curTheme === th.id;
+    html += `<button onclick="setTheme('${th.id}')" style="flex:1;padding:6px 4px;border-radius:6px;border:1px solid ${active?'var(--accent)':'var(--border)'};background:${active?'var(--accent)':'transparent'};color:${active?'#fff':'var(--text)'};cursor:pointer;font-size:10px;">${th.label}</button>`;
+  });
+  html += `</div></div><div class="field"><div class="label">Members (config.json)</div></div>`;
+  (_configCache.members || []).forEach((m, i) => {
+    const inp = 'flex:2;background:var(--bg-input);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 8px;font-size:12px;';
+    const sel = 'flex:1;background:var(--bg-input);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 4px;font-size:12px;';
+    html += `<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
+      <input value="${escapeHtml(m.name)}" style="${inp}" onchange="updateConfigMember(${i},'name',this.value)">
+      <select style="${sel}" onchange="updateConfigMember(${i},'role',this.value)">
+        <option value="human" ${m.role==='human'?'selected':''}>human</option>
+        <option value="ai" ${m.role==='ai'?'selected':''}>ai</option>
+      </select>
+      <input type="color" value="${escapeHtml(safeColor(m.display_color) || '#0f3460')}" style="width:30px;height:26px;padding:0;border:none;cursor:pointer;" onchange="updateConfigMember(${i},'display_color',this.value)">
+      <button onclick="removeConfigMember(${i})" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:14px;">×</button>
     </div>`;
-  messagesDiv.appendChild(div);
+  });
+  html += `<button class="rd-btn ghost" style="margin-top:6px;" onclick="addConfigMember()">+ Add Member</button>`;
+  document.getElementById('rail-detail-body').innerHTML = html;
+}
+const THEME_ICONS = { default: '/irie-icon-3.png', light: '/irie-icon-4.png', dark: '/irie-icon-2.png' };
+function setTheme(id) {
+  document.documentElement.setAttribute('data-theme', id);
+  localStorage.setItem('irie-theme', id);
+  const icon = THEME_ICONS[id] || THEME_ICONS.default;
+  const hdr = document.getElementById('header-icon'); if (hdr) hdr.src = icon;
+  const fav = document.querySelector('link[rel="icon"]'); if (fav) fav.href = icon;
+  if (activeTab === 'config') renderConfigView();
+  if (boardOpen && activeTab === 'tickets') renderBoard();
+}
+async function saveConfig() {
+  await fetch(`${API_BASE}/config`, {method:'POST', headers:authH({'Content-Type':'application/json'}), body: JSON.stringify(_configCache)});
+  buildMentionBar();
+}
+function updateConfigMember(i, field, value) { _configCache.members[i][field] = value; saveConfig(); }
+function removeConfigMember(i) { _configCache.members.splice(i, 1); saveConfig(); renderConfigView(); }
+function addConfigMember() { _configCache.members.push({name:'new', role:'ai', display_color:'#888888'}); saveConfig(); renderConfigView(); }
+
+// ===== Diagram view (plugin) =====
+function renderDiagramView() {
+  setRdLabel('Diagram', '');
+  document.getElementById('rail-detail-body').innerHTML =
+    `<iframe src="http://${location.hostname}:8902/" sandbox="allow-scripts allow-same-origin" style="width:100%;height:100%;min-height:300px;border:none;border-radius:6px;background:#fff;"></iframe>`;
 }
 
-// --- Polling ---
-async function poll() {
-  try {
-    const res = await fetch(`${API_BASE}/pull?since=${lastSeq}`, {headers: authH()});
-    if (!res.ok) return;
-    const data = await res.json();
-    if (data.meeting) document.getElementById('meeting-id').textContent = data.meeting;
-    if (data.messages?.length) {
-      let added = false;
-      data.messages.forEach(m => { if (!shownSeqs.has(m.seq)) { shownSeqs.add(m.seq); addMessage(m); added = true; } if (m.seq > lastSeq) lastSeq = m.seq; });
-      if (added) scrollToBottom();
-    }
-  } catch(e) {}
+// ===== Mention bar =====
+function buildMentionBar() {
+  const bar = document.getElementById('mention-bar');
+  bar.innerHTML = '';
+  (_configCache.members || []).filter(m => m.role !== 'system').forEach(m => {
+    const btn = document.createElement('span');
+    btn.className = 'mention-badge';
+    btn.textContent = m.name;
+    btn.style.borderColor = safeColor(m.display_color) || 'var(--border)';
+    if (activeMentions.has(m.name)) { btn.classList.add('active'); btn.style.background = (safeColor(m.display_color)||'#0f3460')+'33'; }
+    btn.onclick = () => {
+      if (activeMentions.has(m.name)) { activeMentions.delete(m.name); btn.classList.remove('active'); btn.style.background='transparent'; }
+      else { activeMentions.add(m.name); btn.classList.add('active'); btn.style.background = (safeColor(m.display_color)||'#0f3460')+'33'; }
+    };
+    bar.appendChild(btn);
+  });
 }
 
-async function loadTickets() {
-  try {
-    const res = await fetch(`${API_BASE}/tickets`, {headers: authH()});
-    if (!res.ok) return;
-    const data = await res.json();
-    const tickets = data.tickets || [];
-    const active = tickets.filter(t=>t.status!=='closed'&&t.status!=='done');
-    const completed = tickets.filter(t=>t.status==='closed'||t.status==='done');
-    document.getElementById('ticket-count').textContent = active.length;
-    const list = document.getElementById('ticket-list');
-    list.innerHTML = '';
-    active.forEach(t => {
-      const div = document.createElement('div');
-      div.className = 'ticket-item'; div.dataset.id = t.id;
-      div.onclick = () => openTicketDetail(t);
-      div.innerHTML = `<span class="t-id">#${t.id}</span> <span class="t-title">${escapeHtml(t.title)}</span><span class="ticket-status s-${t.status}">${t.status}</span>`;
-      list.appendChild(div);
-    });
-    if (completed.length > 0) {
-      const toggle = document.createElement('div');
-      toggle.style.cssText = 'padding:4px 10px;font-size:10px;color:#888;cursor:pointer;user-select:none;';
-      toggle.textContent = `▶ 完了 (${completed.length})`;
-      toggle.onclick = () => {
-        const wrap = toggle.nextElementSibling;
-        if (wrap.style.display === 'none') { wrap.style.display = ''; toggle.textContent = `▼ 完了 (${completed.length})`; }
-        else { wrap.style.display = 'none'; toggle.textContent = `▶ 完了 (${completed.length})`; }
-      };
-      list.appendChild(toggle);
-      const wrap = document.createElement('div');
-      wrap.style.display = 'none';
-      completed.forEach(t => {
-        const div = document.createElement('div');
-        div.className = 'ticket-item'; div.dataset.id = t.id;
-        div.style.opacity = '0.5';
-        div.onclick = () => openTicketDetail(t);
-        div.innerHTML = `<span class="t-id">#${t.id}</span> <span class="t-title">${escapeHtml(t.title)}</span><span class="ticket-status s-${t.status}">${t.status}</span>`;
-        wrap.appendChild(div);
-      });
-      list.appendChild(wrap);
-    }
-  } catch(e) {}
-}
-
-async function loadFiles() {
-  try {
-    const res = await fetch(`${API_BASE}/files`, {headers: authH()});
-    if (!res.ok) return;
-    const data = await res.json();
-    const files = data.files || [];
-    document.getElementById('file-count').textContent = files.length;
-    const list = document.getElementById('file-list');
-    list.innerHTML = '';
-    files.sort((a,b) => b.ts.localeCompare(a.ts));
-    files.forEach(f => {
-      const url = `${location.origin}/uploads/${f.stored}`;
-      const div = document.createElement('div');
-      div.className = 'file-item';
-      div.innerHTML = `${f.is_image?`<img class="thumb" src="${url}">`:''}<a href="${url}" target="_blank">${escapeHtml(f.name)}</a><div class="f-meta">${f.author} · ${formatSize(f.size)}</div>`;
-      list.appendChild(div);
-    });
-  } catch(e) {}
-}
-
-// --- Tickets ---
-async function createTicket() {
-  const title = document.getElementById('ticket-title').value.trim();
-  if (!title) return;
-  const assignee = document.getElementById('ticket-assignee').value;
-  const desc = document.getElementById('ticket-desc')?.value || '';
-  try {
-    const res = await fetch(`${API_BASE}/tickets/create`, {
-      method:'POST', headers:authH({'Content-Type':'application/json'}),
-      body: JSON.stringify({ title, assignee: assignee||null, created_by: myName || undefined, description: desc })
-    });
-    const data = await res.json();
-    if (data.ok) {
-      const t = data.ticket;
-      await fetch(`${API_BASE}/post`, { method:'POST', headers:authH({'Content-Type':'application/json'}),
-        body: JSON.stringify({ author: myName || undefined, text:`[チケット作成] #${t.id} ${t.title}${t.assignee?' → '+t.assignee:''}` }) });
-    }
-    document.getElementById('ticket-title').value = '';
-    if (document.getElementById('ticket-desc')) document.getElementById('ticket-desc').value = '';
-    document.getElementById('new-ticket-form').style.display = 'none';
-    loadTickets(); await poll();
-  } catch(e) {}
-}
-
-// --- File upload ---
+// ===== File attach / paste =====
 function attachFile(input) {
   if (input.files[0]) { pendingFile = input.files[0]; document.getElementById('attach-name').textContent = pendingFile.name; document.getElementById('attach-preview').style.display = 'block'; }
   input.value = '';
 }
 function clearAttach() { pendingFile = null; document.getElementById('attach-preview').style.display = 'none'; }
-
 document.addEventListener('paste', e => {
-  const items = e.clipboardData?.items;
-  if (!items) return;
+  const items = e.clipboardData?.items; if (!items) return;
   for (const item of items) {
     if (item.type.startsWith('image/')) {
       e.preventDefault();
@@ -487,11 +673,10 @@ document.addEventListener('paste', e => {
   }
 });
 
+// ===== Send =====
 msgInput.addEventListener('keydown', e => { if (e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&e.keyCode!==229) { e.preventDefault(); sendMessage(); } });
 msgInput.addEventListener('input', () => { msgInput.style.height='auto'; msgInput.style.height=Math.min(msgInput.scrollHeight,100)+'px'; });
-
-async function sendMessage() {}
-const _send = async function() {
+async function sendMessage() {
   const text = msgInput.value.trim();
   const btn = document.getElementById('send-btn');
   btn.disabled = true;
@@ -507,7 +692,7 @@ const _send = async function() {
         const mentionPrefix = [...activeMentions].map(n => '@' + n).join(' ');
         const chatText = mentionPrefix ? mentionPrefix + ' ' + attachText : attachText;
         await fetch(`${API_BASE}/post`, {method:'POST', headers:authH({'Content-Type':'application/json'}), body: JSON.stringify({author: myName || undefined, text: chatText})});
-        loadFiles();
+        await loadFiles();
       }
     } catch(e) {}
     msgInput.value = ''; msgInput.style.height = 'auto'; btn.disabled = false; msgInput.focus(); await poll(); return;
@@ -521,139 +706,186 @@ const _send = async function() {
     await poll();
   } catch(e) { msgInput.value = text; }
   msgInput.style.height = 'auto'; btn.disabled = false; msgInput.focus();
-};
-sendMessage = _send;
+}
 
-let _configCache = {members: []};
-const activeMentions = new Set();
-
+// ===== Data loaders =====
+async function poll() {
+  try {
+    const res = await fetch(`${API_BASE}/pull?since=${lastSeq}`, {headers: authH()});
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.meeting) document.getElementById('meeting-id').textContent = data.meeting;
+    if (data.messages?.length) {
+      let added = false;
+      data.messages.forEach(m => { if (!shownSeqs.has(m.seq)) { shownSeqs.add(m.seq); addMessage(m); added = true; } if (m.seq > lastSeq) lastSeq = m.seq; });
+      if (added) scrollToBottom();
+    }
+  } catch(e) {}
+}
+async function loadTickets() {
+  try {
+    const res = await fetch(`${API_BASE}/tickets`, {headers: authH()});
+    if (!res.ok) return;
+    const data = await res.json();
+    _ticketsCache = data.tickets || [];
+    if (activeTab === 'tickets') renderQuick();
+    if (boardOpen && activeTab === 'tickets') renderBoard();
+    // 開いているチケ詳細を最新状態に追従（render-on-change）。
+    // #8: データが実際に変化した時のみ再投影する。無変化なら再描画しない＝詳細textareaの
+    // 手動リサイズ等のローカルUI状態を保持＋ちらつき防止。さらに編集中(フォーカス)はスキップ。
+    if (selectedId != null && activeTab === 'tickets') {
+      const fresh = _ticketsCache.find(x => x.id === selectedId);
+      const ae = document.activeElement;
+      const editing = ae && document.getElementById('rail-detail')?.contains(ae)
+        && ['TEXTAREA','SELECT','INPUT'].includes(ae.tagName);
+      if (fresh && !editing && JSON.stringify(fresh) !== _selectedSnapshot) selectTicket(selectedId);
+    }
+  } catch(e) {}
+}
+async function loadFiles() {
+  try {
+    const res = await fetch(`${API_BASE}/files`, {headers: authH()});
+    if (!res.ok) return;
+    const data = await res.json();
+    _filesCache = data.files || [];
+    if (activeTab === 'files') renderFilesView();
+  } catch(e) {}
+}
 async function loadConfig() {
   try {
     const r = await fetch(`${API_BASE}/config`, {headers: authH()});
     _configCache = await r.json();
     const human = (_configCache.members || []).find(m => m.role === 'human');
     myName = (human && human.name) || '';
-    updateAssigneeOptions();
-    const dp = document.getElementById('diagram-plugin');
-    if (dp) dp.style.display = (_configCache.plugins && _configCache.plugins.diagram) ? '' : 'none';
+    const dia = document.getElementById('tool-diagram');
+    if (dia) dia.style.display = (_configCache.plugins && _configCache.plugins.diagram) ? '' : 'none';
   } catch(e) {}
   return _configCache;
 }
 
-function updateAssigneeOptions() {
-  const sel = document.getElementById('ticket-assignee');
-  if (!sel) return;
-  const cur = sel.value;
-  const opts = [`<option value="" data-i18n="unassigned">${t('unassigned') || '未アサイン'}</option>`];
-  (_configCache.members || []).forEach(m => {
-    opts.push(`<option value="${escapeHtml(m.name)}">${escapeHtml(m.name)}</option>`);
-  });
-  sel.innerHTML = opts.join('');
-  sel.value = cur;
+// ===== Resize handles（localStorage 永続・min/max クランプ・モバイル無効） =====
+function isMobile() { return window.innerWidth <= 760; }
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+// 幅: rail（縦ハンドル）
+function applyRailWidth() {
+  if (isMobile()) return;
+  const w = parseInt(localStorage.getItem('irie-rail-w') || '', 10);
+  if (w) document.getElementById('rail').style.width = clamp(w, 200, 520) + 'px';
 }
-
-function buildMentionBar() {
-  const bar = document.getElementById('mention-bar');
-  bar.innerHTML = '';
-  const members = (_configCache.members || []).filter(m => m.role !== 'system');
-  members.forEach(m => {
-    const btn = document.createElement('span');
-    btn.className = 'mention-badge';
-    btn.textContent = m.name;
-    btn.style.borderColor = safeColor(m.display_color) || '#0f3460';
-    btn.onclick = () => {
-      if (activeMentions.has(m.name)) {
-        activeMentions.delete(m.name);
-        btn.classList.remove('active');
-        btn.style.background = 'transparent';
-      } else {
-        activeMentions.add(m.name);
-        btn.classList.add('active');
-        btn.style.background = (safeColor(m.display_color) || '#0f3460') + '33';
-      }
+// 高さ: 看板（横ハンドル）— 中央の高さに対する px
+function applyBoardHeight() {
+  if (isMobile()) return;
+  const h = parseInt(localStorage.getItem('irie-board-h') || '', 10);
+  const bw = document.getElementById('board-wrap');
+  if (h) { const max = document.getElementById('center').clientHeight - 120; bw.style.height = clamp(h, 90, Math.max(120, max)) + 'px'; }
+}
+// 高さ: QuickView（横ハンドル）
+function applyQvHeight() {
+  if (isMobile()) return;
+  const h = parseInt(localStorage.getItem('irie-qv-h') || '', 10);
+  const qv = document.getElementById('qv-zone');
+  if (h) { qv.style.flex = '0 0 ' + clamp(h, 80, 420) + 'px'; qv.style.maxHeight = 'none'; }
+}
+function initDragCol(handleId, targetId, storeKey, lo, hi) {
+  const handle = document.getElementById(handleId); if (!handle) return;
+  handle.addEventListener('mousedown', e => {
+    if (isMobile()) return;
+    e.preventDefault();
+    const target = document.getElementById(targetId);
+    const startX = e.clientX, startW = target.offsetWidth;
+    handle.classList.add('drag');
+    const move = e2 => { const w = clamp(startW + (e2.clientX - startX), lo, hi); target.style.width = w + 'px'; localStorage.setItem(storeKey, String(w)); };
+    const up = () => { handle.classList.remove('drag'); document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); };
+    document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);
+  });
+}
+function initDragRow(handleId, targetId, storeKey, lo, hiFn) {
+  const handle = document.getElementById(handleId); if (!handle) return;
+  handle.addEventListener('mousedown', e => {
+    if (isMobile()) return;
+    e.preventDefault();
+    const target = document.getElementById(targetId);
+    const startY = e.clientY, startH = target.offsetHeight;
+    handle.classList.add('drag');
+    const move = e2 => {
+      const hi = (typeof hiFn === 'function') ? hiFn() : hiFn;
+      const h = clamp(startH + (e2.clientY - startY), lo, hi);
+      if (targetId === 'qv-zone') { target.style.flex = '0 0 ' + h + 'px'; target.style.maxHeight = 'none'; }
+      else target.style.height = h + 'px';
+      localStorage.setItem(storeKey, String(h));
     };
-    bar.appendChild(btn);
+    const up = () => { handle.classList.remove('drag'); document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); };
+    document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);
   });
 }
+initDragCol('rz-rail', 'rail', 'irie-rail-w', 200, 520);
+initDragRow('rz-board', 'board-wrap', 'irie-board-h', 90, () => document.getElementById('center').clientHeight - 120);
+initDragRow('rz-qv', 'qv-zone', 'irie-qv-h', 80, 420);
 
-function openConfigPanel() {
-  const cfg = _configCache;
-  const members = cfg.members || [];
-  const curTheme = localStorage.getItem('irie-theme') || 'default';
-  const themes = [
-    {id:'default', label:'Default (Ocean)', desc:'Blue/Cyan/Orange'},
-    {id:'light', label:'Light (Pastel)', desc:'Purple/Pink/Soft'},
-    {id:'dark', label:'Dark (Deep)', desc:'Navy/Red/Pro'},
-  ];
-  let html = '<div style="margin-bottom:16px;"><div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">Theme</div><div style="display:flex;gap:4px;">';
-  themes.forEach(t => {
-    const active = curTheme === t.id;
-    html += `<button onclick="setTheme('${t.id}')" style="flex:1;padding:6px 4px;border-radius:4px;border:1px solid ${active?'var(--accent)':'var(--border)'};background:${active?'var(--accent)':'transparent'};color:${active?'#fff':'var(--text)'};cursor:pointer;font-size:10px;">${t.label}</button>`;
-  });
-  html += '</div></div>';
-  html += '<div style="margin-bottom:12px;font-size:12px;color:var(--text-muted);">Members (config.json)</div>';
-  members.forEach((m, i) => {
-    html += `<div class="field" style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
-      <input value="${escapeHtml(m.name)}" style="flex:2;padding:4px 6px;background:var(--bg-input);border:1px solid var(--border);color:var(--text);border-radius:4px;" onchange="updateConfigMember(${i},'name',this.value)">
-      <select style="flex:1;padding:4px;background:var(--bg-input);border:1px solid var(--border);color:var(--text);border-radius:4px;" onchange="updateConfigMember(${i},'role',this.value)">
-        <option value="human" ${m.role==='human'?'selected':''}>human</option>
-        <option value="ai" ${m.role==='ai'?'selected':''}>ai</option>
-      </select>
-      <input type="color" value="${escapeHtml(safeColor(m.display_color) || '#0f3460')}" style="width:30px;height:24px;border:none;cursor:pointer;" onchange="updateConfigMember(${i},'display_color',this.value)">
-      <button onclick="removeConfigMember(${i})" style="background:none;border:none;color:#e94560;cursor:pointer;font-size:14px;">×</button>
-    </div>`;
-  });
-  html += `<button onclick="addConfigMember()" style="margin-top:8px;padding:4px 12px;background:#0f3460;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11px;">+ Add Member</button>`;
-  openDetail('Config', html);
+// ===== Theme init =====
+(function() {
+  const th = localStorage.getItem('irie-theme') || 'default';
+  document.documentElement.setAttribute('data-theme', th);
+  const icon = THEME_ICONS[th] || THEME_ICONS.default;
+  const hdr = document.getElementById('header-icon'); if (hdr) hdr.src = icon;
+  const fav = document.querySelector('link[rel="icon"]'); if (fav) fav.href = icon;
+})();
+
+// ===== #4 SSE 購読（fetch + ReadableStream：EventSource と違い X-Irie-Token を付けられ、
+// トークンを URL に載せずに済む＝非流出）。setInterval ポーリングは撤去し、変化イベントで再描画。 =====
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+function handleSSE(chunk) {
+  let ev = 'message', data = '';
+  for (const ln of chunk.split('\n')) {
+    if (ln.startsWith(':')) return;                 // コメント行（: ping ハートビート）は無視
+    if (ln.startsWith('event:')) ev = ln.slice(6).trim();
+    else if (ln.startsWith('data:')) data += ln.slice(5).trim();
+  }
+  if (ev !== 'change') return;
+  let kinds = [];
+  try { kinds = (JSON.parse(data) || {}).kinds || []; } catch(_) {}
+  if (!kinds.length || kinds.includes('messages')) poll();
+  if (!kinds.length || kinds.includes('tickets')) loadTickets();
+  if (!kinds.length || kinds.includes('files')) loadFiles();
+}
+async function subscribeEvents() {
+  while (true) {
+    try {
+      const res = await fetch(`${API_BASE}/events`, { headers: authH() });
+      if (!res.ok || !res.body) { await sleep(3000); continue; }
+      // (再)接続直後に必ずフル同期＝切断中の取りこぼしを回収（since=lastSeq で差分のみ）
+      await poll(); await loadTickets(); await loadFiles();
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = '';
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        let idx;
+        while ((idx = buf.indexOf('\n\n')) >= 0) {
+          handleSSE(buf.slice(0, idx));
+          buf = buf.slice(idx + 2);
+        }
+      }
+    } catch(e) {}
+    await sleep(2000);   // 切断時の再接続バックオフ
+  }
 }
 
-const THEME_ICONS = {default: '/irie-icon-3.png', light: '/irie-icon-4.png', dark: '/irie-icon-2.png'};
-function openDiagramPanel() {
-  openDetail('Diagram', '<iframe src="http://' + location.hostname + ':8902/" sandbox="allow-scripts allow-same-origin" style="width:100%;height:100%;border:none;border-radius:4px;background:#fff;"></iframe>');
-  const dc = document.getElementById('detail-content');
-  if (dc) dc.style.padding = '0';
-  const dp = document.getElementById('detail-panel');
-  if (dp) { dp.style.width = '600px'; dp.style.minWidth = '400px'; }
-}
-
-function setTheme(id) {
-  document.documentElement.setAttribute('data-theme', id);
-  localStorage.setItem('irie-theme', id);
-  const icon = THEME_ICONS[id] || THEME_ICONS.default;
-  const hdr = document.getElementById('header-icon');
-  if (hdr) hdr.src = icon;
-  const fav = document.querySelector('link[rel="icon"]');
-  if (fav) fav.href = icon;
-  openConfigPanel();
-}
-(function() { const t = localStorage.getItem('irie-theme') || 'default'; document.documentElement.setAttribute('data-theme', t); const icon = THEME_ICONS[t]; const hdr = document.getElementById('header-icon'); if (hdr) hdr.src = icon; const fav = document.querySelector('link[rel="icon"]'); if (fav) fav.href = icon; })();
-
-async function saveConfig() {
-  await fetch(`${API_BASE}/config`, {method:'POST', headers:authH({'Content-Type':'application/json'}), body: JSON.stringify(_configCache)});
+// ===== Boot =====
+applyRailWidth();
+applyQvHeight();
+document.getElementById('rz-qv').style.display = isMobile() ? 'none' : '';
+loadI18n(currentLang).then(async () => {
+  setTab('tickets');     // i18n 解決後に初期タブ描画（既定: Tickets、看板は閉じた状態＝chat 全高）
+  await loadConfig();
   buildMentionBar();
-}
-
-function updateConfigMember(i, field, value) {
-  _configCache.members[i][field] = value;
-  saveConfig();
-}
-
-function removeConfigMember(i) {
-  _configCache.members.splice(i, 1);
-  saveConfig();
-  openConfigPanel();
-}
-
-function addConfigMember() {
-  _configCache.members.push({name: 'new', role: 'ai', display_color: '#888888'});
-  saveConfig();
-  openConfigPanel();
-}
-
-loadI18n(currentLang).then(async () => { await loadConfig(); poll(); loadTickets(); loadFiles(); buildMentionBar(); });
-setInterval(poll, 2000);
-setInterval(loadTickets, 5000);
-setInterval(loadFiles, 10000);
+  await loadTickets();
+  await loadFiles();
+  await poll();
+  subscribeEvents();     // 以降はサーバからの push で変化時のみ再描画（ポーリング廃止）
+});
 </script>
 </body>
 </html>
