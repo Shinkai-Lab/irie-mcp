@@ -185,7 +185,8 @@ def cmd_append(req):
     cut = False
     if author in ais:
         if _ai_chain_count(mid) >= AI_CHAIN_LIMIT:
-            stripped = mention_re.sub(lambda m: m.group(1), text)
+            # #9: 全角＠を半角に正規化してから除去（メンションカット時に全角メンションも確実に剥がす）
+            stripped = mention_re.sub(lambda m: m.group(1), text.replace("＠", "@"))
             if stripped != text:
                 text = stripped
             text = "<メンションカット> " + text

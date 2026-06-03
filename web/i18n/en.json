@@ -26,5 +26,17 @@
   "menu": "Menu",
   "attachment": "[Attached: {name} ({url})]",
   "config": "Config",
-  "edit_config": "Open Settings"
+  "edit_config": "Open Settings",
+  "comments": "Comments",
+  "no_tickets": "No tickets",
+  "no_files": "No files",
+  "detail_empty": "Click a card to open its details here",
+  "detail_empty2": "Double-click for the kanban board",
+  "welcome_hint": "Click a card for details (lower-left) / double-click or \"Board\" to open the kanban board",
+  "board_sub": "Click a card for details on the lower-left",
+  "chat": "Chat",
+  "in_meeting": "In meeting",
+  "open_board": "Board",
+  "new_label": "New",
+  "board_title": "Ticket Board"
 }
