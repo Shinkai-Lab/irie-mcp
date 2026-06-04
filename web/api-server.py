@@ -28,7 +28,9 @@ import uuid
 import mimetypes
 import datetime
 import socketserver
-from http.server import HTTPServer, BaseHTTPRequestHandler
+import threading
+import time
+from http.server import HTTPServer, ThreadingHTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -126,10 +128,18 @@ def validate_config(body):
     return None
 
 
+# #4(SSE/Threading): META_FILE は api-server が in-process で read-modify-write する唯一の
+# 書込先。ThreadingHTTPServer 下では複数リクエストが並行しうるので、META_FILE への
+# 全書込（append / 全書換）をこのロックで直列化して破損を防ぐ。
+# tickets/messages はサブプロセス(irie-tickets.py / iried.py)が fcntl.flock で排他済みのため対象外。
+_meta_lock = threading.Lock()
+
+
 def save_upload_meta(entry):
     UPLOADS.mkdir(parents=True, exist_ok=True)
-    with open(META_FILE, "a") as f:
-        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    with _meta_lock:
+        with open(META_FILE, "a") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
 
 def load_upload_meta():
@@ -143,6 +153,26 @@ def load_upload_meta():
             except json.JSONDecodeError:
                 continue
     return entries
+
+
+def watch_signature():
+    """SSE 用：監視対象ファイルの mtime シグネチャ。変化検出で push する。"""
+    active = Path(ROOM) / "ACTIVE"
+    meeting = ""
+    try:
+        if active.exists():
+            meeting = active.read_text().strip()
+    except OSError:
+        pass
+
+    def mt(p):
+        try:
+            return p.stat().st_mtime if p and p.exists() else 0.0
+        except OSError:
+            return 0.0
+
+    msg = max(mt(active), mt(Path(ROOM) / f"{meeting}.jsonl") if meeting else 0.0)
+    return {"messages": msg, "tickets": mt(Path(ROOM) / "tickets.jsonl"), "files": mt(META_FILE)}
 
 
 def is_loopback(host):
@@ -205,6 +235,10 @@ class IrieHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/")
+
+        if path == "/api/events":
+            self._handle_events()
+            return
 
         if path == "/api/pull":
             qs = urlparse(self.path).query
@@ -409,9 +443,10 @@ class IrieHandler(BaseHTTPRequestHandler):
                 self._json_response({"error": "file not found"}, 404)
                 return
             UPLOADS.mkdir(parents=True, exist_ok=True)
-            with open(META_FILE, "w") as f:
-                for e in entries:
-                    f.write(json.dumps(e, ensure_ascii=False) + "\n")
+            with _meta_lock:
+                with open(META_FILE, "w") as f:
+                    for e in entries:
+                        f.write(json.dumps(e, ensure_ascii=False) + "\n")
             stored = next((e["stored"] for e in entries if e["id"] == file_id), "")
             pending = UPLOADS / f"{stored}.pending"
             if pending.exists():
@@ -421,6 +456,42 @@ class IrieHandler(BaseHTTPRequestHandler):
 
         self.send_response(404)
         self.end_headers()
+
+    def _handle_events(self):
+        """SSE: room ファイルの mtime を監視し、変化時だけ change イベントを push する。
+        認証は通常の fetch リクエスト同様 X-Irie-Token（EventSource ではなく fetch+stream で購読）。
+        ThreadingHTTPServer なので 1 接続が 1 スレッドを占有しても他 API はブロックしない。"""
+        if not self._authorized():
+            self._unauthorized()
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection", "keep-alive")
+        self.send_header("X-Accel-Buffering", "no")  # nginx 等のバッファリング抑止
+        self._cors()
+        self.end_headers()
+        try:
+            self.wfile.write(b": connected\nretry: 3000\n\n")
+            self.wfile.flush()
+            last = watch_signature()
+            last_ping = time.time()
+            while True:
+                time.sleep(1.0)
+                cur = watch_signature()
+                changed = [k for k in cur if cur[k] != last.get(k)]
+                if changed:
+                    last = cur
+                    payload = json.dumps({"kinds": changed})
+                    self.wfile.write(f"event: change\ndata: {payload}\n\n".encode())
+                    self.wfile.flush()
+                    last_ping = time.time()
+                elif time.time() - last_ping >= 15:
+                    self.wfile.write(b": ping\n\n")  # 接続維持ハートビート
+                    self.wfile.flush()
+                    last_ping = time.time()
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            return  # クライアント切断：スレッド終了
 
     def _handle_upload(self):
         content_type = self.headers.get("Content-Type", "")
@@ -490,15 +561,19 @@ class IrieHandler(BaseHTTPRequestHandler):
         self._json_response({"ok": True, "file": entry})
 
 
-class IrieHTTPServer(HTTPServer):
-    """HTTPServer that skips the reverse-DNS lookup done in server_bind().
+class IrieHTTPServer(ThreadingHTTPServer):
+    """Threading HTTP server that also skips the reverse-DNS lookup in server_bind().
 
-    http.server.HTTPServer.server_bind() calls socket.getfqdn(host), which can
-    block for ~30s on hosts with slow or misconfigured reverse DNS (observed on
-    CI runners). Worse, it runs between bind() and listen(), so the socket does
-    not accept connections until it returns — making startup appear to hang.
-    Set server_name from the address directly instead.
+    #4(SSE): スレッド化が必須。SSE は接続を長時間保持するため、シングルスレッドだと
+    1 本の SSE 接続がサーバ全体をブロックして他リクエストが処理できなくなる。
+    ThreadingHTTPServer は接続ごとにスレッドを立てるので並行処理できる。
+    daemon_threads=True で、サーバ停止時に未終了の SSE スレッドを道連れに落とす。
+
+    server_bind override は既存の理由（getfqdn の ~30s ハング回避: bind/listen 間で
+    走り socket が accept しないため起動がハングして見える）を踏襲。
     """
+
+    daemon_threads = True
 
     def server_bind(self):
         socketserver.TCPServer.server_bind(self)

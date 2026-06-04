@@ -564,7 +564,9 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
 });
 
 function isForMe(msg) {
-  const text = msg.text || "";
+  // #9: 全角＠(U+FF20)を半角@に正規化してから照合する。日本語IMEだと＠が全角になり、
+  // 既存の @ 限定パターンに当たらず本人にメンションが届かないため（保存テキストは変更しない）。
+  const text = (msg.text || "").replace(/＠/g, "@");
   const mentionMe = new RegExp(`@${WHO}(?![\\w぀-ヿ一-鿿])`);
   const mentionAll = /@all(?![\w])/;
   return mentionMe.test(text) || mentionAll.test(text);
