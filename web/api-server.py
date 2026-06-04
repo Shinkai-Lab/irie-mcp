@@ -575,6 +575,14 @@ class IrieHTTPServer(ThreadingHTTPServer):
 
     daemon_threads = True
 
+    def handle_error(self, request, client_address):
+        """クライアント切断は SSE・keep-alive 常用下では日常イベント（タブを閉じる/リロード/スリープ）。
+        既定実装はその度にトレースバックを stderr に吐いて紛らわしいので、切断系だけ黙って無視する。"""
+        exc = sys.exc_info()[1]
+        if isinstance(exc, (ConnectionResetError, BrokenPipeError)):
+            return
+        super().handle_error(request, client_address)
+
     def server_bind(self):
         socketserver.TCPServer.server_bind(self)
         host, port = self.server_address[:2]
