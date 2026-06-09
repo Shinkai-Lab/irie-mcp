@@ -38,5 +38,7 @@
   "in_meeting": "In meeting",
   "open_board": "Board",
   "new_label": "New",
-  "board_title": "Ticket Board"
+  "board_title": "Ticket Board",
+  "older_hidden": "↑ Earlier messages are hidden",
+  "archived_more": "+{n} more (archived)"
 }

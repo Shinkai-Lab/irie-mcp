@@ -146,6 +146,9 @@
   #center:not(.board-open) #chat-wrap { border-top:none; }
   .chat-head { padding:7px 16px; font-size:11px; color:var(--text-muted); background:var(--bg-secondary); border-bottom:1px solid var(--border); display:flex; gap:8px; align-items:center; flex-shrink:0; }
   #messages { flex:1; overflow-y:auto; padding:12px 16px; display:flex; flex-direction:column; gap:8px; }
+  /* #6: 初期ロードで前方省略時のバナー／closedアーカイブの「+N件」表示 */
+  .older-banner { text-align:center; font-size:10px; color:var(--text-muted); padding:4px 0; opacity:.8; flex-shrink:0; }
+  .archive-more { text-align:center; font-size:10px; color:var(--text-muted); padding:6px 0 2px; opacity:.8; }
   .msg { display:flex; gap:8px; align-items:flex-start; }
   .msg .avatar { width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:11px; flex-shrink:0; background:var(--avatar-ai); color:#fff; }
   .msg .body { flex:1; }
@@ -281,7 +284,11 @@ const STATUS = {
   closed:      { label:'Closed',      dot:'var(--col-closed)',      cls:'p-closed' },
 };
 const STATUS_ORDER = ['open','in_progress','done','closed'];
+// #6(スケーリング): チャットDOMの上限。超えたら古い順に間引く。closed列の展開時の表示上限。
+const MAX_DOM_MESSAGES = 300;
+const CLOSED_VISIBLE = 30;
 let lastSeq = 0;
+let firstLoad = true;  // #6: 最初の poll かどうか（truncated バナー判定用）
 let i18n = {};
 let myName = '';
 let currentLang = (localStorage.getItem('irie-lang') || (navigator.language.startsWith('ja') ? 'ja' : 'en'));
@@ -400,12 +407,30 @@ function renderBoard() {
     const items = _ticketsCache.filter(tk => (tk.status||'open') === st);
     const isClosed = st === 'closed';
     const folded = isClosed && closedFolded;
+    // #6(スケーリング): closed は無限に積み上がるので、
+    //  ・折畳中は本体を一切生成しない（件数のみ）＝CSS隠しで全件生成していた肥大の解消
+    //  ・展開時も直近 CLOSED_VISIBLE 件だけ描画し、超過分は「+N 件」表示に畳む
+    let bodyHtml;
+    if (isClosed) {
+      if (folded) {
+        bodyHtml = '';
+      } else {
+        const recent = [...items].sort((a,b) =>
+          (b.updated_at||b.created_at||'').localeCompare(a.updated_at||a.created_at||'') || (b.id||0)-(a.id||0));
+        const shown = recent.slice(0, CLOSED_VISIBLE);
+        const hidden = recent.length - shown.length;
+        bodyHtml = shown.map(cardHtml).join('')
+          + (hidden > 0 ? `<div class="archive-more">${escapeHtml(t('archived_more', {n: hidden}))}</div>` : '');
+      }
+    } else {
+      bodyHtml = items.map(cardHtml).join('');
+    }
     return `<div class="col ${isClosed?'closed-col':''} ${folded?'folded':''}" data-col="${st}" ondragover="colDragOver(event,this)" ondragleave="colDragLeave(event,this)" ondrop="colDrop(event,'${st}')">
       <div class="col-head" ${isClosed?`onclick="toggleClosed()"`:''}>
         <span><span class="dot" style="background:${STATUS[st].dot}"></span>${isClosed&&folded?'▶ ':''}${STATUS[st].label}</span>
         <span class="cnt">${items.length}</span>
       </div>
-      <div class="col-body">${items.map(cardHtml).join('')}</div>
+      <div class="col-body">${bodyHtml}</div>
     </div>`;
   }).join('');
   if (selectedId != null) markSelected(selectedId);
@@ -476,6 +501,34 @@ function addMessage(msg) {
       <div class="text">${escapeHtml(msg.text)}</div>
     </div>`;
   messagesDiv.appendChild(div);
+  pruneMessages();
+}
+
+// #6(スケーリング): DOM上限を超えたら古い .msg ノードから間引く。
+// いまは log(jsonl) が真実なので "消す" だけでOK。将来 上スクロールで遡る場合は
+// 間引いた範囲を /api/pull?since=... で再取得できる前提（earliest_seq を活用）。
+// 先頭の older-banner は .msg ではないので間引き対象から自然に外れる。
+function pruneMessages() {
+  const msgs = messagesDiv.getElementsByClassName('msg');
+  while (msgs.length > MAX_DOM_MESSAGES) {
+    messagesDiv.removeChild(msgs[0]);
+  }
+}
+
+// 初期ロードで前方が省略されている時に出す「以前のメッセージは省略」バナー。
+function setOlderBanner(truncated) {
+  let banner = document.getElementById('older-banner');
+  if (truncated) {
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.id = 'older-banner';
+      banner.className = 'older-banner';
+      banner.textContent = t('older_hidden');
+      messagesDiv.insertBefore(banner, messagesDiv.firstChild);
+    }
+  } else if (banner) {
+    banner.remove();
+  }
 }
 
 // ===== Ticket detail (rail-detail 下段) =====
@@ -715,6 +768,8 @@ async function poll() {
     if (!res.ok) return;
     const data = await res.json();
     if (data.meeting) document.getElementById('meeting-id').textContent = data.meeting;
+    // #6: 初期ロード(since=0)の窓で前方が切れていれば「以前のメッセージは省略」を表示。
+    if (firstLoad) { setOlderBanner(!!data.truncated); firstLoad = false; }
     if (data.messages?.length) {
       let added = false;
       data.messages.forEach(m => { if (!shownSeqs.has(m.seq)) { shownSeqs.add(m.seq); addMessage(m); added = true; } if (m.seq > lastSeq) lastSeq = m.seq; });
