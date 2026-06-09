@@ -148,6 +148,75 @@ class WebApiPortInUseTest(unittest.TestCase):
             room.cleanup()
 
 
+class WebApiPullWindowTests(unittest.TestCase):
+    """#6: /api/pull の初期ロード窓（limit / truncated / earliest_seq）。"""
+
+    def _daemon(self, cmd, payload):
+        r = subprocess.run(
+            [sys.executable, str(ROOT / "room" / "bin" / "iried.py"), cmd],
+            input=json.dumps(payload), capture_output=True, text=True,
+            env={"IRIE_ROOM": str(self.room), "PATH": "/usr/bin:/bin"},
+        )
+        return json.loads(r.stdout)
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.room = Path(self.tmp.name)
+        (self.room / "config.json").write_text(
+            json.dumps({"members": [{"name": "alice", "role": "human"}]}), encoding="utf-8",
+        )
+        # 会議を開始（seq1=system）し、20件追記 → 全21件
+        self._daemon("start", {"topic": "t", "author": "alice"})
+        for i in range(20):
+            self._daemon("append", {"author": "alice", "text": f"m{i}"})
+        self.total = self._daemon("log", {"meeting": (self.room / "ACTIVE").read_text().strip()})["total"]
+
+        self.port = free_port()
+        env = dict(os.environ)
+        env.update({
+            "IRIE_ROOM": str(self.room), "IRIE_HOST": "127.0.0.1",
+            "IRIE_PORT": str(self.port), "IRIE_PULL_LIMIT": "5",
+        })
+        env.pop("IRIE_API_TOKEN", None)
+        self.proc = subprocess.Popen(
+            [sys.executable, str(SERVER)], env=env,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        if not wait_until_up(self.port):
+            self.proc.terminate()
+            self.fail("server did not start")
+
+    def tearDown(self):
+        self.proc.terminate()
+        try:
+            self.proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            self.proc.kill()
+        self.tmp.cleanup()
+
+    def test_initial_load_applies_default_window(self):
+        code, data = req("GET", self.port, "/api/pull?since=0")
+        self.assertEqual(code, 200)
+        self.assertEqual(len(data["messages"]), 5)       # 既定 limit=5
+        self.assertTrue(data["truncated"])
+        self.assertEqual(data["earliest_seq"], self.total - 4)
+        self.assertEqual(data["messages"][-1]["seq"], self.total)
+
+    def test_explicit_limit_overrides_default(self):
+        code, data = req("GET", self.port, "/api/pull?since=0&limit=100")
+        self.assertEqual(code, 200)
+        self.assertEqual(len(data["messages"]), self.total)
+        self.assertFalse(data["truncated"])
+
+    def test_diff_pull_has_no_limit(self):
+        # since>0 の差分は制限なし＆truncatedにならない
+        code, data = req("GET", self.port, f"/api/pull?since={self.total - 1}")
+        self.assertEqual(code, 200)
+        self.assertEqual(len(data["messages"]), 1)
+        self.assertEqual(data["messages"][0]["seq"], self.total)
+        self.assertFalse(data["truncated"])
+
+
 class WebApiBindGuardTest(unittest.TestCase):
     def test_refuses_non_loopback_without_token(self):
         env = dict(os.environ)

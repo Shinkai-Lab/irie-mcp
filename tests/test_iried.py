@@ -108,6 +108,42 @@ class IriedTests(unittest.TestCase):
         r = m.cmd_append({"author": "alice", "text": "no meeting"})
         self.assertFalse(r["ok"])
 
+    # ---- #6: 初期ロード制限（cmd_log limit） ----
+    def test_log_without_limit_returns_all(self):
+        m = load_iried(self.room)
+        m.ensure_dirs()
+        mid = m.cmd_start({"topic": "t", "author": "alice"})["meeting"]
+        for i in range(10):
+            m.cmd_append({"author": "alice", "text": f"m{i}"})
+        r = m.cmd_log({"meeting": mid})
+        self.assertTrue(r["ok"])
+        self.assertEqual(len(r["messages"]), r["total"])
+        self.assertFalse(r["truncated"])
+
+    def test_log_limit_returns_tail_window(self):
+        m = load_iried(self.room)
+        m.ensure_dirs()
+        mid = m.cmd_start({"topic": "t", "author": "alice"})["meeting"]  # seq 1 = system
+        for i in range(20):
+            m.cmd_append({"author": "alice", "text": f"m{i}"})
+        total = m.cmd_log({"meeting": mid})["total"]
+        r = m.cmd_log({"meeting": mid, "limit": 5})
+        self.assertTrue(r["truncated"])
+        self.assertEqual(r["total"], total)
+        self.assertEqual(len(r["messages"]), 5)
+        # 末尾N件＝seq が連続した最後の5件
+        seqs = [x["seq"] for x in r["messages"]]
+        self.assertEqual(seqs, [total - 4, total - 3, total - 2, total - 1, total])
+
+    def test_log_limit_larger_than_total_not_truncated(self):
+        m = load_iried(self.room)
+        m.ensure_dirs()
+        mid = m.cmd_start({"topic": "t", "author": "alice"})["meeting"]
+        m.cmd_append({"author": "alice", "text": "only one"})
+        r = m.cmd_log({"meeting": mid, "limit": 100})
+        self.assertFalse(r["truncated"])
+        self.assertEqual(len(r["messages"]), r["total"])
+
 
 if __name__ == "__main__":
     unittest.main()
