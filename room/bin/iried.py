@@ -237,7 +237,17 @@ def cmd_log(req):
         return {"ok": False, "error": "会議が指定されていません"}
     if not valid_mid(mid):
         return {"ok": False, "error": "不正なmeeting id"}
-    return {"ok": True, "meeting": mid, "messages": read_messages(mid)}
+    msgs = read_messages(mid)
+    total = len(msgs)
+    # #6(スケーリング): limit 指定時は末尾 N 件だけ返す（初期ロードの窓）。
+    # truncated=True なら手前に省略があることを呼び出し側に伝える。
+    limit = req.get("limit")
+    truncated = False
+    if isinstance(limit, int) and limit > 0 and total > limit:
+        msgs = msgs[-limit:]
+        truncated = True
+    return {"ok": True, "meeting": mid, "messages": msgs,
+            "total": total, "truncated": truncated}
 
 
 def cmd_status(req):

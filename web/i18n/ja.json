@@ -38,5 +38,7 @@
   "in_meeting": "会議中",
   "open_board": "看板",
   "new_label": "新規",
-  "board_title": "チケット看板"
+  "board_title": "チケット看板",
+  "older_hidden": "↑ 以前のメッセージは省略されています",
+  "archived_more": "ほか {n} 件（アーカイブ）"
 }

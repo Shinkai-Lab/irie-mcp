@@ -52,6 +52,8 @@ CORS_ORIGIN = os.environ.get("IRIE_CORS_ORIGIN", "")
 WEB_AUTHOR_ENV = os.environ.get("IRIE_WEB_AUTHOR", "")
 MAX_UPLOAD = 10 * 1024 * 1024  # 10MB
 MAX_JSON_BODY = 1 * 1024 * 1024  # 1MB
+# #6(スケーリング): 初期ロード(since=0)で返すメッセージの既定上限（末尾N件の窓）。
+DEFAULT_PULL_LIMIT = int(os.environ.get("IRIE_PULL_LIMIT", "200"))
 # インライン表示を許す画像タイプ。それ以外は attachment で返す（アップロードHTML/SVG経由のXSS防止）
 INLINE_IMAGE_TYPES = {"image/png", "image/jpeg", "image/gif", "image/webp"}
 
@@ -243,24 +245,43 @@ class IrieHandler(BaseHTTPRequestHandler):
         if path == "/api/pull":
             qs = urlparse(self.path).query
             since = 0
+            limit = None
             for kv in qs.split("&"):
                 if kv.startswith("since="):
                     try:
                         since = int(kv[len("since="):])
                     except ValueError:
                         since = 0
+                elif kv.startswith("limit="):
+                    try:
+                        limit = int(kv[len("limit="):])
+                    except ValueError:
+                        limit = None
             active_file = Path(ROOM) / "ACTIVE"
             if not active_file.exists():
-                self._json_response({"meeting": None, "messages": []})
+                self._json_response({"meeting": None, "messages": [], "truncated": False})
                 return
             meeting = active_file.read_text().strip()
-            result = call_daemon("log", {"meeting": meeting})
+            # #6(スケーリング): 初期ロード(since=0)は既定で末尾 DEFAULT_PULL_LIMIT 件だけ返す＝窓。
+            # 明示 limit が来ればそれを優先。since>0 の差分pullは制限なし（差分は小さい）。
+            eff_limit = limit if limit is not None else (DEFAULT_PULL_LIMIT if since == 0 else None)
+            req = {"meeting": meeting}
+            if eff_limit is not None:
+                req["limit"] = eff_limit
+            result = call_daemon("log", req)
             if "error" in result or not result.get("ok"):
                 self._json_response(result, 500)
                 return
             msgs = result.get("messages", [])
             filtered = [m for m in msgs if m.get("seq", 0) > since]
-            self._json_response({"meeting": meeting, "messages": filtered})
+            # truncated: 窓で前方が切れている＝「以前のメッセージは省略」をUIに出す材料。
+            truncated = bool(result.get("truncated")) and filtered and filtered[0].get("seq", 0) > 1
+            self._json_response({
+                "meeting": meeting,
+                "messages": filtered,
+                "truncated": bool(truncated),
+                "earliest_seq": (filtered[0].get("seq") if filtered else None),
+            })
             return
 
         if path == "/api/status":
